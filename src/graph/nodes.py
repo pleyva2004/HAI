@@ -1,7 +1,8 @@
 """LangGraph workflow nodes"""
 
 import logging
-from typing import Any, Dict
+import math
+from typing import Any, Dict, List
 
 from ..models.toon_models import GraphState, QuestionAnalysis, SATQuestion
 from ..services.ocr_service import OCRService
@@ -12,6 +13,22 @@ from ..services.difficulty_calibrator import DifficultyCalibrator
 from ..services.duplication_detector import DuplicationDetector
 
 logger = logging.getLogger(__name__)
+
+
+def _build_generation_brief(state: GraphState) -> str:
+    """Helper to build a reusable generation prompt."""
+    category = state.analysis.category if state.analysis else "algebra"
+    difficulty = state.analysis.difficulty if state.analysis else 50
+    base_requirements = state.description or state.extracted_text or "Generate SAT questions."
+
+    return f"""
+Requirements: {base_requirements}
+
+Generate SAT questions with these characteristics:
+- Category: {category}
+- Difficulty: {difficulty}/100
+- Style: Match the examples provided
+"""
 
 
 async def ocr_node(state: GraphState, services: Dict[str, Any]) -> GraphState:
@@ -170,28 +187,83 @@ async def generate_node(state: GraphState, services: Dict[str, Any]) -> GraphSta
     try:
         llm_service: LLMService = services["llm"]
 
-        # Build generation prompt
-        prompt = f"""
-Requirements: {state.description}
+        total_requested = max(state.num_questions, 1)
+        real_target = total_requested // 2
+        synthetic_target = total_requested - real_target
 
-Generate SAT questions with these characteristics:
-- Category: {state.analysis.category if state.analysis else 'algebra'}
-- Difficulty: {state.analysis.difficulty if state.analysis else 50}/100
-- Style: Match the examples provided
-"""
+        if not state.use_hybrid or not state.real_questions:
+            logger.warning(
+                "Hybrid generation unavailable (use_hybrid=%s, real_questions=%d). "
+                "Falling back to full synthetic generation.",
+                state.use_hybrid,
+                len(state.real_questions),
+            )
+            state.hybrid_targets = {}
 
-        # Generate questions
-        generated = await llm_service.generate_questions(
-            prompt=prompt,
-            num_questions=state.num_questions * 3,  # Generate extra for filtering
-            category=state.analysis.category if state.analysis else "algebra",
-            difficulty=state.analysis.difficulty if state.analysis else 50.0,
-            style_profile=state.style_profile,
-            use_both_models=True,
+            fallback_generated = await llm_service.generate_questions(
+                prompt=_build_generation_brief(state),
+                num_questions=state.num_questions * 3,
+                category=state.analysis.category if state.analysis else "algebra",
+                difficulty=state.analysis.difficulty if state.analysis else 50.0,
+                style_profile=state.style_profile,
+                use_both_models=True,
+            )
+
+            state.generated_candidates = fallback_generated
+            logger.info("Generated %d synthetic fallback questions", len(fallback_generated))
+            return state
+
+        state.hybrid_targets = {
+            "real": real_target,
+            "generated": synthetic_target,
+        }
+
+        max_real_candidates = max(real_target * 3, total_requested)
+        state.real_questions = state.real_questions[:max_real_candidates]
+
+        synthetic_candidates: List[SATQuestion] = []
+        templates = state.real_questions[: min(len(state.real_questions), 3)]
+
+        if synthetic_target > 0 and templates:
+            variations_per_template = max(
+                1, math.ceil((synthetic_target * 2) / len(templates))
+            )
+
+            for template in templates:
+                variations = await llm_service.generate_variations(
+                    template=template,
+                    num_questions=variations_per_template,
+                    style_profile=state.style_profile,
+                )
+                synthetic_candidates.extend(variations)
+        else:
+            logger.warning("Insufficient templates for variation generation; skipping hybrid mix")
+
+        desired_pool = max(synthetic_target * 2, state.num_questions)
+        if len(synthetic_candidates) < desired_pool:
+            extra_needed = desired_pool - len(synthetic_candidates)
+            logger.info(
+                "Generating %d additional synthetic questions to reach target pool",
+                extra_needed,
+            )
+            extra = await llm_service.generate_questions(
+                prompt=_build_generation_brief(state),
+                num_questions=extra_needed,
+                category=state.analysis.category if state.analysis else "algebra",
+                difficulty=state.analysis.difficulty if state.analysis else 50.0,
+                style_profile=state.style_profile,
+                use_both_models=True,
+            )
+            synthetic_candidates.extend(extra)
+
+        state.generated_candidates = synthetic_candidates
+        logger.info(
+            "Hybrid generation ready: %d real templates, %d synthetic candidates (target real=%d, synthetic=%d)",
+            len(state.real_questions),
+            len(state.generated_candidates),
+            real_target,
+            synthetic_target,
         )
-
-        state.generated_candidates = generated
-        logger.info(f"Generated {len(generated)} candidate questions")
 
     except Exception as e:
         logger.error(f"Generation failed: {e}")
@@ -214,17 +286,26 @@ async def validate_node(state: GraphState, services: Dict[str, Any]) -> GraphSta
     logger.info("=== Validation Node ===")
 
     validated = []
+    agreement_scores: List[float] = []
     llm_service: LLMService = services["llm"]
 
     # Validate generated questions
     for question in state.generated_candidates:
         try:
-            is_valid, feedback = await llm_service.validate_question(question)
+            result = await llm_service.validate_question(question)
+            agreement_scores.append(result.agreement)
+            logger.debug(
+                "Validator agreement for %s: %.1f%%",
+                question.id,
+                result.agreement * 100,
+            )
 
-            if is_valid:
+            if result.is_valid:
                 validated.append(question)
             else:
-                logger.debug(f"Question {question.id} failed validation: {feedback}")
+                logger.debug(
+                    "Question %s failed validation: %s", question.id, result.feedback
+                )
 
         except Exception as e:
             logger.warning(f"Validation error for {question.id}: {e}")
@@ -235,6 +316,10 @@ async def validate_node(state: GraphState, services: Dict[str, Any]) -> GraphSta
     logger.info(
         f"Validation complete: {len(validated)}/{len(state.generated_candidates)} passed"
     )
+
+    if agreement_scores:
+        avg_agreement = sum(agreement_scores) / len(agreement_scores)
+        logger.info(f"Average validator agreement: {avg_agreement * 100:.1f}%")
 
     return state
 
@@ -358,15 +443,36 @@ async def filter_node(state: GraphState, services: Dict[str, Any]) -> GraphState
     )
     logger.info(f"After deduplication: {len(all_candidates)} candidates")
 
-    # Rank by style match score and select top N
+    # Rank by style match score
     if state.style_profile:
         all_candidates = style_matcher.rank_by_style(
             all_candidates, state.style_profile
         )
 
-    # Select final questions
-    final_count = min(state.num_questions, len(all_candidates))
-    state.final_questions = all_candidates[:final_count]
+    mix_targets = getattr(state, "hybrid_targets", {}) or {}
+    target_real = mix_targets.get("real")
+    target_generated = mix_targets.get("generated")
+
+    if (
+        target_real is not None
+        and target_generated is not None
+        and state.num_questions > 0
+    ):
+        real_pool = [q for q in all_candidates if q.is_real]
+        synthetic_pool = [q for q in all_candidates if not q.is_real]
+
+        selected_real = real_pool[: target_real]
+        selected_generated = synthetic_pool[: target_generated]
+        combined = selected_real + selected_generated
+
+        if len(combined) < state.num_questions:
+            remaining = [q for q in all_candidates if q not in combined]
+            combined.extend(remaining[: state.num_questions - len(combined)])
+
+        state.final_questions = combined[: state.num_questions]
+    else:
+        final_count = min(state.num_questions, len(all_candidates))
+        state.final_questions = all_candidates[:final_count]
 
     # Calculate metadata
     real_count = sum(1 for q in state.final_questions if q.is_real)
@@ -387,6 +493,7 @@ async def filter_node(state: GraphState, services: Dict[str, Any]) -> GraphState
             if state.final_questions
             else 0
         ),
+        "target_mix": mix_targets,
         "filters_applied": ["style_matching", "difficulty_calibration", "deduplication"],
     }
 

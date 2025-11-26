@@ -44,7 +44,7 @@ pip install -r requirements.txt
 cp .env.example .env
 
 # Edit .env with your actual keys
-nano .env  # or use your preferred editor
+vim .env  # or use your preferred editor
 ```
 
 Required variables:
@@ -400,6 +400,49 @@ Current MVP targets:
 - **Architecture**: `/docs/01-ARCHITECTURE.md`
 - **Implementation Guide**: `/docs/02-IMPLEMENTATION-GUIDE.md`
 - **Feature Docs**: `/docs/01-style-matching.md`, etc.
+
+## 🆕 Setup Guide 2: Advanced Feature Rollout
+
+This companion guide covers the newly added capabilities (multi-model validation, hybrid generation, and DeepSeek-OCR ingestion) plus how to test them.
+
+### 🔁 Feature Overview
+- **Multi-Model Validation** – GPT-4 + Claude must unanimously confirm correctness (`LLMService.validate_question`).
+- **Hybrid Generation** – Workflow now targets a 50/50 mix of real + AI variations (see `generate_node` / `filter_node`).
+- **DeepSeek-OCR** – Docs/PDFs run through `deepseek-ai/DeepSeek-OCR`, producing markdown that we parse into structured questions.
+
+### ⚙️ Dependency Upgrades
+1. Re-install requirements to pull in the new ML/OCR stack:
+   ```bash
+ brew install poppler
+   ```
+2. Install **poppler** for `pdf2image` (macOS): `brew install poppler`
+3. (Optional but faster) Cache the DeepSeek-OCR weights locally via `huggingface-cli download deepseek-ai/DeepSeek-OCR`.
+
+### 🧪 Feature Validation Steps
+1. **Multi-Model Validation**
+   - Ensure `OPENAI_API_KEY` + `ANTHROPIC_API_KEY` are set.
+   - Call `POST /api/v1/validate` with a known-good SAT question and confirm the response includes `agreement: 1.0`.
+2. **Hybrid Generation**
+   - Run `POST /api/v1/generate` with `prefer_real=true`.
+   - Confirm response metadata reports a near 50/50 split (`metadata.target_mix`).
+3. **DeepSeek-OCR**
+   - Upload a multi-question PDF/image via `/api/v1/generate`.
+   - Watch logs for `DeepSeek-OCR processed page …` and verify extracted questions include separated choices.
+
+### 🧪 Tests for the New Features
+Run the focused tests below (in addition to the existing suite):
+```bash
+# Multi-model validation aggregation logic
+pytest tests/test_llm_validation.py -v
+
+# Hybrid LangGraph node logic
+pytest tests/test_hybrid_generation.py -v
+
+# DeepSeek-OCR parsing + fallbacks
+pytest tests/test_ocr_service.py -v
+```
+
+These tests stub external services where needed, so they can run without API keys (DeepSeek tests only exercise the markdown parsing helpers).
 
 ## ✅ Success Checklist
 

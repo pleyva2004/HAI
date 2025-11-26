@@ -2,7 +2,7 @@
 
 from typing import Any, Dict, List, Literal, Optional, Tuple
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class QuestionChoice(BaseModel):
@@ -99,6 +99,7 @@ class GraphState(BaseModel):
     # Output
     final_questions: List[SATQuestion] = []
     metadata: Dict[str, Any] = {}
+    hybrid_targets: Dict[str, int] = Field(default_factory=dict)
 
     # Error tracking
     errors: List[str] = []

@@ -25,8 +25,14 @@ textstat>=0.7.3
 # Structured Output
 toon-py>=0.1.0
 
-# OCR (Note: Chandra may need special installation)
-# chandra-ocr>=1.0.0  # Uncomment when available
+# OCR
+transformers>=4.44.0
+torch>=2.4.0
+torchvision>=0.19.0
+accelerate>=0.34.0
+pillow>=10.4.0
+einops>=0.8.0
+pdf2image>=1.17.0
 
 # Cache & Storage
 redis>=5.0.0

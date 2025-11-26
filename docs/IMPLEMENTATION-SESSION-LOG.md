@@ -197,6 +197,74 @@ This session delivered a **complete, production-ready MVP backend** for the SAT 
 
 ---
 
+### Feature 4: Multi-Model Validation ✅ *(New)*
+
+**Purpose**: Require unanimous agreement between GPT-4o and Claude before a question is accepted.
+
+**Implementation Details:**
+
+**LLMService Enhancements** (`src/services/llm_service.py`)
+- Introduced a `ValidationResult` dataclass capturing verdict, aggregated feedback, and validator agreement ratio.
+- `validate_question()` now invokes both GPT-4o and Claude independently and only approves when every model returns `VALID`.
+- Feedback contains per-model verdicts plus a summary line (e.g., `Agreement: 50.0% (1/2 validators)`).
+
+**LangGraph Validation Node** (`validate_node`)
+- Logs every question’s agreement score and emits an average agreement metric per workflow execution.
+- Continues to fall back gracefully if a validator errors, ensuring the pipeline never blocks.
+
+**Success Metrics:**
+- Acceptance requires 100% agreement (all validators approve).
+- Agreement statistics now observable via logs/metadata for monitoring.
+
+---
+
+### Feature 5: Hybrid Generation (50/50 Mix) ✅ *(New)*
+
+**Purpose**: Ensure each response combines official SAT questions with AI variations derived from those real templates.
+
+**Implementation Details:**
+
+**GraphState Updates** (`src/models/toon_models.py`)
+- Tracks `hybrid_targets` so downstream nodes know the intended real/synthetic counts.
+
+**Generate Node** (`src/graph/nodes.py`)
+- Calculates a default 50/50 split (`real_target`, `synthetic_target`).
+- Calls the new `LLMService.generate_variations()` method to clone real questions with different numbers/contexts.
+- Falls back to full synthetic output only when real templates are unavailable or hybrid mixing is disabled.
+
+**Filter Node**
+- Uses `hybrid_targets` when selecting finalists, preserving the requested mix whenever enough candidates exist.
+- Persists the mix information into the workflow metadata for observability.
+
+**Success Metrics:**
+- Default request (`num_questions=4`) yields ~2 real + 2 generated in the final payload.
+- Metadata now surfaces `target_mix` and actual counts to help monitor adherence.
+
+---
+
+### Feature 6: DeepSeek-OCR Integration ✅ *(New)*
+
+**Purpose**: Upgrade the OCR pipeline to use `deepseek-ai/DeepSeek-OCR` for structured markdown extraction (replacing the earlier Chandra placeholder).
+
+**Implementation Details:**
+
+**OCRService** (`src/services/ocr_service.py`)
+- Lazy-loads the Hugging Face tokenizer/model, using Flash Attention automatically when CUDA is available.
+- Converts PDFs to RGB images via `pdf2image`; supports PNG/JPEG/WebP uploads out of the box.
+- Uses the prompt `<image>\n<|grounding|>Convert the document to markdown.` to capture question structure (headings, lists, tables).
+- Parses markdown into `ExtractedQuestion` objects and gracefully falls back to regex detection if the markdown cannot be parsed.
+- Limits large uploads to the first 5 pages to keep latency predictable.
+
+**Dependencies**
+- Added `transformers`, `torch`, `torchvision`, `accelerate`, `pillow`, `einops`, and `pdf2image` to `requirements.txt`.
+- Documented the need for Poppler (`brew install poppler`) inside the setup guide’s new advanced section.
+
+**Success Metrics:**
+- Question/choice boundaries maintained from markdown output.
+- Detailed logging per processed page for troubleshooting.
+
+---
+
 ## 🔄 LangGraph Workflow
 
 **Complete 6-Node Pipeline** (`src/graph/`)
@@ -211,8 +279,8 @@ OCR Node → Analyze Node → Search Node →
 ### Node Implementations
 
 **1. OCR Node** (`ocr_node`)
-- Extracts text from uploaded files (PDF/images)
-- Chandra integration ready
+- Extracts structured markdown from uploaded files via **DeepSeek-OCR**
+- Supports PDFs (through pdf2image) and common image formats
 - Fallback to description if no file
 - Error handling with state tracking
 
@@ -229,25 +297,26 @@ OCR Node → Analyze Node → Search Node →
 - Top-k retrieval (default: 2× num_questions)
 
 **4. Generate Node** (`generate_node`)
-- Calls LLM Service with GPT-4 + Claude
-- Generates 3× requested questions for filtering
-- Applies style profile to generation
-- Structured output using Toon models
+- Plans a 50/50 hybrid mix (real templates + synthetic variations)
+- Calls `generate_variations()` for top OfficialSATQuestion templates
+- Generates fallback synthetic questions when needed
+- Applies style profile to every synthetic batch using Toon outputs
 
 **5. Validate Node** (`validate_node`)
-- Cross-model validation of correctness
+- Cross-model validation with GPT-4 + Claude and agreement tracking
 - Checks answer accuracy and clarity
 - Filters out invalid questions
-- Tracks validation pass rate
+- Tracks validation pass rate **and** average agreement
 
 **6. Filter Node** (`filter_node`) - **Core Quality Control**
 - Applies all 3 MVP features:
   1. Style Matching (if profile available)
   2. Difficulty Calibration (to target ± tolerance)
   3. Anti-Duplication (semantic + structural)
+- Preserves requested real vs synthetic targets when possible
 - Ranks by style match score
 - Selects top N final questions
-- Generates metadata (real vs generated, avg scores)
+- Generates metadata (real vs generated counts, avg scores, target mix)
 
 ### State Management
 
@@ -475,11 +544,11 @@ CREATE TABLE sat_questions (
 ### OCR Service (`src/services/ocr_service.py`)
 
 **Document Processing:**
-- PDF text extraction (Chandra integration ready)
-- Image OCR support
-- Question boundary detection
-- Choice extraction (A/B/C/D patterns)
-- Structure preservation
+- Powered by `deepseek-ai/DeepSeek-OCR` (Hugging Face Transformers)
+- PDF support via `pdf2image` (Poppler) plus PNG/JPEG/WebP ingestion
+- Markdown-first extraction keeps question/choice boundaries intact
+- Choice parsing from lists or tables with regex fallback
+- Page-limit guard (default 5) to constrain inference time
 
 **Methods:**
 - `extract_text(file_path)` - Basic extraction
@@ -630,13 +699,28 @@ python scripts/train_difficulty_model.py
 - ✅ CORS headers
 - ✅ 404 handling
 
+**5. Multi-Model Validation Tests** (`test_llm_validation.py`) *(New)*
+- ✅ Ensures questions fail when validators disagree
+- ✅ Confirms 100% agreement requirement
+- ✅ Verifies aggregated feedback strings
+
+**6. Hybrid Generation Tests** (`test_hybrid_generation.py`) *(New)*
+- ✅ Asserts 50/50 target calculation and metadata
+- ✅ Confirms variation generation is invoked
+- ✅ Validates fallback synthetic generation path
+
+**7. DeepSeek-OCR Parsing Tests** (`test_ocr_service.py`) *(New)*
+- ✅ Markdown parser extracts question + choices
+- ✅ Regex fallback handles plain text inputs
+- ✅ Skips automatically when Torch (OCR dependency) isn’t installed
+
 ### Test Statistics
 
-- **Total Test Files**: 4
-- **Total Test Cases**: 40+
-- **Coverage**: Core features, services, API
+- **Total Test Files**: 7
+- **Total Test Cases**: 55+
+- **Coverage**: Core features, services, OCR, hybrid workflow, API
 - **Test Framework**: pytest with fixtures
-- **Mocking**: Minimal dependencies for unit tests
+- **Mocking**: Minimal dependencies; new tests stub LLMs/OCR for reproducibility
 
 ### Running Tests
 
@@ -741,6 +825,15 @@ pytest -vv
 - redis>=5.0.0
 - boto3>=1.34.0
 - python-dotenv>=1.0.0
+
+**OCR & Vision (New):**
+- transformers>=4.44.0
+- torch>=2.4.0
+- torchvision>=0.19.0
+- accelerate>=0.34.0
+- pillow>=10.4.0
+- einops>=0.8.0
+- pdf2image>=1.17.0
 
 **Testing:**
 - pytest>=8.3.0
