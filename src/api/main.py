@@ -86,5 +86,6 @@ if __name__ == "__main__":
         port=settings.api_port,
         reload=True,
         log_level=settings.log_level.lower(),
+        timeout_keep_alive=300,  # 5 minutes for long-running LLM operations
     )
 

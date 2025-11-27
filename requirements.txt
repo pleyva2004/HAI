@@ -33,6 +33,7 @@ accelerate>=0.34.0
 pillow>=10.4.0
 einops>=0.8.0
 pdf2image>=1.17.0
+easydict>=1.10
 
 # Cache & Storage
 redis>=5.0.0
