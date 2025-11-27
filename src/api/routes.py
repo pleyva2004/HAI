@@ -252,9 +252,9 @@ async def validate_question(request: ValidateRequest):
     )
 
     try:
-        is_valid, feedback = await llm_service.validate_question(request.question)
+        result = await llm_service.validate_question(request.question)
 
-        return ValidateResponse(is_valid=is_valid, feedback=feedback)
+        return ValidateResponse(is_valid=result.is_valid, feedback=result.feedback)
 
     except Exception as e:
         raise HTTPException(

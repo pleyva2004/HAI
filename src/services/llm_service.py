@@ -1,6 +1,7 @@
 """LLM Service - Multi-model orchestration with GPT-4 and Claude"""
 
 import logging
+from dataclasses import dataclass
 from typing import List, Optional
 
 from langchain_openai import ChatOpenAI
@@ -12,9 +13,19 @@ from ..models.toon_models import (
     GeneratedQuestions,
     QuestionChoice,
     StyleProfile,
+    OfficialSATQuestion,
 )
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class ValidationResult:
+    """Structured result returned by multi-model validation."""
+
+    is_valid: bool
+    feedback: str
+    agreement: float
 
 
 class LLMService:
@@ -105,20 +116,59 @@ class LLMService:
 
         return all_questions
 
-    async def validate_question(self, question: SATQuestion) -> tuple[bool, str]:
+    async def generate_variations(
+        self,
+        template: OfficialSATQuestion,
+        num_questions: int,
+        style_profile: Optional[StyleProfile] = None,
+    ) -> List[SATQuestion]:
+        """
+        Generate template-based variations of a real SAT question.
+
+        Args:
+            template: Real SAT question to mirror
+            num_questions: Number of variations requested
+            style_profile: Optional style constraints
+
+        Returns:
+            List of SATQuestion variations
+        """
+        if num_questions <= 0:
+            return []
+
+        prompt = self._build_variation_prompt(
+            template=template,
+            num_questions=num_questions,
+            style_profile=style_profile,
+        )
+
+        variations = await self._generate_with_model(
+            model_name="gpt4",
+            prompt=prompt,
+            num_questions=num_questions,
+        )
+
+        for idx, variation in enumerate(variations):
+            variation.category = template.category
+            variation.subcategory = template.subcategory
+            variation.is_real = False
+            if not variation.id:
+                variation.id = f"var_{template.question_id}_{idx}"
+
+        return variations
+
+    async def validate_question(self, question: SATQuestion) -> ValidationResult:
         """
         Validate a question for correctness and clarity
 
-        Uses cross-model validation (one model checks another's work)
+        Uses cross-model validation (each model checks the question independently)
 
         Args:
             question: Question to validate
 
         Returns:
-            Tuple of (is_valid, feedback_message)
+            ValidationResult with verdict, aggregated feedback, and agreement score
         """
-        validator_model = self.models["gpt4"]
-
         validation_prompt = f"""
 Validate this SAT question for correctness and clarity:
 
@@ -147,21 +197,65 @@ Respond with:
 Be strict but fair in your assessment.
 """
 
-        try:
-            response = await validator_model.ainvoke(
-                [HumanMessage(content=validation_prompt)]
+        validator_results = []
+
+        for name, model in self.models.items():
+            try:
+                response = await model.ainvoke([HumanMessage(content=validation_prompt)])
+                content = response.content.strip()
+                is_valid = content.upper().startswith("VALID")
+                validator_results.append(
+                    {
+                        "model": name,
+                        "is_valid": is_valid,
+                        "raw_feedback": content,
+                    }
+                )
+                logger.debug(
+                    "Validation result for %s via %s: %s",
+                    question.id,
+                    name,
+                    content[:80],
+                )
+            except Exception as e:
+                logger.error("Validation via %s failed: %s", name, e)
+                validator_results.append(
+                    {
+                        "model": name,
+                        "is_valid": False,
+                        "raw_feedback": f"Validation error: {str(e)}",
+                    }
+                )
+
+        if not validator_results:
+            return ValidationResult(
+                is_valid=False,
+                feedback="Validation failed: no validator results",
+                agreement=0.0,
             )
-            result = response.content.strip()
 
-            is_valid = result.startswith("VALID")
-            feedback = result if not is_valid else "All validation checks passed"
+        total_validators = len(validator_results)
+        valid_votes = sum(1 for result in validator_results if result["is_valid"])
+        agreement = valid_votes / total_validators
+        is_valid = valid_votes == total_validators
 
-            logger.debug(f"Validation result for {question.id}: {result[:50]}...")
-            return is_valid, feedback
+        feedback_lines = [
+            f"[{result['model'].upper()}] "
+            f"{'VALID' if result['is_valid'] else 'INVALID'} - {result['raw_feedback']}"
+            for result in validator_results
+        ]
 
-        except Exception as e:
-            logger.error(f"Validation failed: {e}")
-            return False, f"Validation error: {str(e)}"
+        feedback_lines.append(
+            f"Agreement: {agreement * 100:.1f}% ({valid_votes}/{total_validators} validators)"
+        )
+
+        feedback = "\n".join(feedback_lines)
+
+        return ValidationResult(
+            is_valid=is_valid,
+            feedback=feedback if feedback else "Validation complete",
+            agreement=agreement,
+        )
 
     async def _generate_with_model(
         self, model_name: str, prompt: str, num_questions: int
@@ -261,6 +355,63 @@ Return questions in this JSON format:
                 "- Include detailed explanations showing the solution process",
                 "- Use clear, professional language",
                 "- Avoid ambiguity or trick questions",
+            ]
+        )
+
+        return "\n".join(prompt_parts)
+
+    def _build_variation_prompt(
+        self,
+        template: OfficialSATQuestion,
+        num_questions: int,
+        style_profile: Optional[StyleProfile],
+    ) -> str:
+        """Build prompt for template-based variation generation."""
+        choice_lines = [
+            f"A) {template.choices.A}",
+            f"B) {template.choices.B}",
+            f"C) {template.choices.C}",
+            f"D) {template.choices.D}",
+        ]
+        choices_block = "\n".join(choice_lines)
+
+        style_lines: List[str] = []
+        if style_profile:
+            style_lines = [
+                "",
+                "Match these style attributes:",
+                f"- Word count range: {style_profile.word_count_range[0]}-{style_profile.word_count_range[1]} words",
+                f"- Vocabulary level: Grade {style_profile.vocabulary_level:.1f}",
+                f"- Number complexity: {style_profile.number_complexity}",
+                f"- Context type: {style_profile.context_type}",
+                f"- Structure cues: {style_profile.question_structure[:120]}...",
+            ]
+
+        prompt_parts = [
+            f"Generate {num_questions} NEW SAT questions by creating variations of the official question below.",
+            "",
+            "Template question:",
+            f"Question: {template.question_text}",
+            "Choices:",
+            choices_block,
+            f"Correct answer: {template.correct_answer}",
+            "",
+            "Requirements:",
+            "- Test the SAME mathematical concept as the template.",
+            "- Keep the same overall structure and reasoning steps.",
+            "- Use new numbers, contexts, and surface wording so the question is fresh.",
+            f"- Match difficulty: {template.difficulty:.1f}/100 (national correct rate {template.national_correct_rate:.1f}%).",
+            "- Provide one correct option and three plausible distractors.",
+            "- Include a full explanation mirroring official SAT style.",
+            "- Never copy text verbatim from the template.",
+        ]
+
+        prompt_parts.extend(style_lines)
+
+        prompt_parts.extend(
+            [
+                "",
+                "Return the questions using the exact JSON schema from the system prompt (SATQuestion list).",
             ]
         )
 
