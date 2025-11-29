@@ -50,20 +50,20 @@ class QuestionGenerationState(BaseModel):
 
     # USER INPUT (from user)
     user_image: Optional[str] = None
-    user_description: Optional[str] = None
+    user_description: Optional[str] = ""
     user_options: UserOptions = UserOptions()
 
     # EXTRACTED FEATURES (from extract_structure node)
-    extracted_text: Optional[str] = None
-    equation_content: Optional[str] = None
-    table_data: Optional[Dict[str, Any]] = None
-    visual_description: Optional[str] = None
+    extracted_text: Optional[str] = ""
+    equation_content: Optional[str] = ""
+    table_data: Optional[Dict[str, Any]] = {}
+    visual_description: Optional[str] = ""
 
     # CLASSIFICATION (from classify_question node)
-    section: Optional[Literal["Math", "Reading and Writing"]] = None
-    predicted_domain: Optional[Literal["Algebra", "Advanced Math", "Problem-Solving and Data Analysis", "Geometry and Trigonometry"]] = None
+    section: Optional[Literal["Math", "Reading and Writing"]] = "Math"
+    predicted_domain: Optional[Literal["Algebra", "Advanced Math", "Problem-Solving and Data Analysis", "Geometry and Trigonometry"]] = "Algebra"
     skill: List[str] = []
-    predicted_difficulty: Optional[Literal["Easy", "Medium", "Hard"]] = None
+    predicted_difficulty: Optional[Literal["Easy", "Medium", "Hard"]] = "Medium"
 
     # RETRIEVED CONTEXT (from retrieve_examples node)
     similar_questions: List[Question] = []
