@@ -82,10 +82,6 @@ class QuestionGenerationState(BaseModel):
     started_at: str = ""
     error: Optional[str] = None
 
-    class Config:
-        arbitrary_types_allowed = True
-        use_enum_values = True
-
     def increment_generation_attempt(self) -> None:
         self.generation_attempt += 1
 
