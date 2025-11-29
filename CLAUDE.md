@@ -238,6 +238,66 @@ User Input (screenshot/text)
 - **Caching**: Redis for sessions and temporary data
 - **Storage**: S3-compatible (MinIO for local dev)
 
+### Data Flow & Type Safety
+
+**CRITICAL: Follow this pattern for all data handling across layers.**
+
+#### Layer Responsibilities
+
+1. **Service Layer** (`backend/services/`)
+   - **Return Pydantic models** for type safety and validation
+   - Functions should return Pydantic model instances, not dictionaries
+   - Example: `extract_from_image()` returns `SATQuestionExtraction` (Pydantic model)
+
+2. **Workflow Layer** (`backend/workflows/`)
+   - **Use Pydantic models directly** with attribute access
+   - Access fields using dot notation: `result.text`, `result.equation`
+   - Do NOT use dictionary access: `result.get("text")` ❌
+
+3. **API Layer** (`backend/api/`)
+   - **Convert to JSON/dict only at API boundaries** for serialization
+   - Use `.model_dump()` or `.dict()` when returning responses
+   - This is the ONLY place where conversion to dict should happen
+
+#### TOON Format for Claude Input
+
+**IMPORTANT**: Before sending any structured input to Claude models, convert it to TOON format using the [toon-python library](https://github.com/toon-format/toon-python).
+
+TOON format provides 30-60% token reduction vs JSON, making it more efficient for LLM contexts.
+
+**Usage Pattern:**
+```python
+from toon_format import encode
+
+# Before sending structured data to Claude
+structured_data = {
+    "examples": [{"id": 1, "text": "..."}, {"id": 2, "text": "..."}],
+    "constraints": {"difficulty": "Medium", "section": "Math"}
+}
+
+# Convert to TOON format
+toon_input = encode(structured_data)
+
+# Use in Claude prompt
+prompt = f"""
+Here are the examples in TOON format:
+{toon_input}
+
+Generate a similar question.
+"""
+```
+
+**When to use TOON:**
+- Sending structured examples to Claude
+- Passing complex constraints or metadata
+- Including tabular data (TOON excels at uniform arrays)
+- Any structured input that would otherwise be JSON
+
+**When NOT to use TOON:**
+- Simple text prompts (no conversion needed)
+- Direct Pydantic model output_format (Claude handles this)
+- API responses (use JSON for standard HTTP)
+
 ### Core Services
 
 **OCR Service** (`src/services/ocr_service.py`)

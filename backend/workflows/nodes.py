@@ -5,44 +5,30 @@ Each node is a thin orchestration layer that calls services and updates state.
 Nodes should be atomic and delegate actual work to the services layer.
 """
 
-from backend.workflows.state import QuestionGenerationState, Question
+from backend.workflows.state import QuestionGenerationState, BaseQuestion, GeneratedQuestion, MathQuestionExtraction
+from typing import Optional
 from backend.services import claude, embeddings, validation, retrieval
 
 
 def extract_structure(state: QuestionGenerationState) -> QuestionGenerationState:
 
     # Check what input we have
+    extracted_features: Optional[MathQuestionExtraction] = None
 
-    if state.user_image is not None:
+    if state.user_image:
         # Extract from image using Claude Vision
-        result = claude.extract_from_image(state.user_image)
+        extracted_features = claude.extract_from_image(state.user_image)
 
-        state.extracted_text = result.get("text")
-        state.equation_content = result.get("equation")
-        state.table_data = result.get("table")
-        state.visual_description = result.get("visual")
-
-    elif state.user_description is not None:
+    elif state.user_description:
         # Extract from text description
-        result = claude.extract_from_description(state.user_description)
+        extracted_features = claude.extract_from_description(state.user_description)
 
-        state.extracted_text = result.get("text")
-        state.equation_content = result.get("equation")
-        state.table_data = result.get("table")
-        state.visual_description = result.get("visual")
-
-    else:
+    if extracted_features is None:
         state.error = "No image or description provided"
+    else:
+        state.extracted_features = extracted_features
 
     return state
-
-
-def classify_question(state: QuestionGenerationState) -> QuestionGenerationState:
-    """
-    Classify the question into SAT taxonomy.
-
-    Delegates to claude service for classification.
-    """
 
     # Get classification from Claude
     result = claude.classify_question(

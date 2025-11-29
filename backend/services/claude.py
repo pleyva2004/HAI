@@ -7,26 +7,19 @@ Handles all interactions with the Anthropic Claude API including:
 - Question generation
 """
 
-from typing import Dict, Any, List
-import json
+from typing import Dict, Any, List, Optional
 
+from pydantic import BaseModel
 from anthropic import Anthropic
 
-from backend.config import CLAUDE_API_KEY, CLAUDE_MODEL
-from backend.workflows.state import Question
+from backend.config import CLAUDE_MODEL
+from backend.workflows.state import BaseQuestion, MathQuestionExtraction, QuestionClassification, GeneratedQuestion
 
 
 # Initialize Claude client
-client = Anthropic(api_key=CLAUDE_API_KEY)
+client = Anthropic()
 
-
-def extract_from_image(image_base64: str) -> Dict[str, Any]:
-    """
-    Extract structured information from an image using Claude Vision.
-
-    Returns dict with keys: text, equation, table, visual
-    """
-
+def extract_from_image(image_base64: str) -> MathQuestionExtraction:
     prompt = """
     Analyze this SAT question image and extract the following information:
 
@@ -34,19 +27,13 @@ def extract_from_image(image_base64: str) -> Dict[str, Any]:
     2. Any equations or formulas (convert to LaTeX format)
     3. Any table data (as structured JSON)
     4. Description of any graphs, diagrams, or visual elements
-
-    Return your response as JSON with these keys:
-    {
-        "text": "the main question text",
-        "equation": "LaTeX formatted equations if present, null otherwise",
-        "table": {"headers": [...], "rows": [...]} if table present, null otherwise,
-        "visual": "description of visual elements if present, null otherwise"
-    }
     """
 
-    message = client.messages.create(
+    print("HAI is analyzing the image")
+    response = client.beta.messages.parse(  # type: ignore
         model=CLAUDE_MODEL,
         max_tokens=2000,
+        betas=['structured-outputs-2025-11-13'],
         messages=[
             {
                 "role": "user",
@@ -65,51 +52,49 @@ def extract_from_image(image_base64: str) -> Dict[str, Any]:
                     }
                 ]
             }
-        ]
+        ],
+        output_format=MathQuestionExtraction
     )
 
-    response_text = message.content[0].text
-    result = json.loads(response_text)
+    print("HAI is providing analysis")
 
-    return result
+    if response.parsed_output is None:
+        print("HAI failed to analyze the image")
+        raise ValueError("Failed to analyze the image")
+    return response.parsed_output # type: ignore
 
 
-def extract_from_description(description: str) -> Dict[str, Any]:
-    """
-    Extract structured information from a text description.
-
-    Returns dict with keys: text, equation, table, visual
-    """
+def extract_from_description(description: str) -> MathQuestionExtraction:
 
     prompt = f"""
     Analyze this SAT question description and extract the following information:
 
     Description: {description}
 
-    Return your response as JSON with these keys:
-    {{
-        "text": "the main question text or concept",
-        "equation": "any equations mentioned (LaTeX format), null if none",
-        "table": null (tables not possible from text description),
-        "visual": "description if visual elements are mentioned, null otherwise"
-    }}
+    Extract:
+    1. The main question text or concept
+    2. Any equations mentioned (convert to LaTeX format)
+    3. Any visual elements described
     """
 
-    message = client.messages.create(
+    response = client.beta.messages.parse(  # type: ignore
         model=CLAUDE_MODEL,
         max_tokens=1000,
+        betas=['structured-outputs-2025-11-13'],
         messages=[
             {
                 "role": "user",
                 "content": prompt
             }
-        ]
+        ],
+        output_format=MathQuestionExtraction
     )
 
-    response_text = message.content[0].text
-    result = json.loads(response_text)
-
-    return result
+    # Convert Pydantic model to dict (nested models are automatically converted)
+    if response.parsed_output is None:
+        print("HAI failed to analyze the description")
+        raise ValueError("Failed to analyze the description")
+    return response.parsed_output # type: ignore
 
 
 def classify_question(extracted_text: str, equation_content: str, visual_description: str) -> Dict[str, Any]:
@@ -118,7 +103,6 @@ def classify_question(extracted_text: str, equation_content: str, visual_descrip
 
     Returns dict with keys: section, domain, skill, difficulty
     """
-
     # Build the content to classify
     content_parts = []
 
@@ -144,34 +128,28 @@ def classify_question(extracted_text: str, equation_content: str, visual_descrip
     - Domain (if Math): "Algebra", "Advanced Math", "Problem-Solving and Data Analysis", or "Geometry and Trigonometry"
     - Skills: List of specific skills tested (e.g., ["linear equations", "word problems"])
     - Difficulty: "Easy", "Medium", or "Hard"
-
-    Return JSON format:
-    {{
-        "section": "...",
-        "domain": "...",
-        "skill": ["skill1", "skill2"],
-        "difficulty": "..."
-    }}
     """
 
-    message = client.messages.create(
+    response = client.beta.messages.parse(  # type: ignore
         model=CLAUDE_MODEL,
         max_tokens=500,
+        betas=['structured-outputs-2025-11-13'],
         messages=[
             {
                 "role": "user",
                 "content": prompt
             }
-        ]
+        ],
+        output_format=QuestionClassification
     )
 
-    response_text = message.content[0].text
-    result = json.loads(response_text)
+    # Convert Pydantic model to dict
+    if response.parsed_output is None:
+        raise ValueError("Failed to parse structured output from Claude response")
+    return response.parsed_output.model_dump()
 
-    return result
 
-
-def generate_question(user_description: str, section: str, domain: str, difficulty: str, skill: List[str], similar_questions: List[Question]) -> Dict[str, Any]:
+def generate_question(user_description: str, section: str, domain: str, difficulty: str, skill: List[str], similar_questions: List[BaseQuestion]) -> Dict[str, Any]:
     """
     Generate a new SAT question using Claude.
 
@@ -228,49 +206,30 @@ def generate_question(user_description: str, section: str, domain: str, difficul
     if difficulty:
         prompt_parts.append(f"- Difficulty: {difficulty}")
 
-    if skills and len(skills) > 0:
-        skills_text = ", ".join(skills)
+    if skill and len(skill) > 0:
+        skills_text = ", ".join(skill)
         prompt_parts.append(f"- Skills: {skills_text}")
 
     prompt_parts.append("")
 
-    # Add format instructions
-    format_instructions = """
-    OUTPUT FORMAT (return as valid JSON):
-    {
-        "question_text": "the main question text",
-        "equation_content": "LaTeX formatted equations if applicable, null otherwise",
-        "table_data": {"headers": [...], "rows": [...]} if applicable, null otherwise,
-        "visual_description": "description of any visual elements if applicable, null otherwise",
-        "answer_choices": {
-            "A": "first choice",
-            "B": "second choice",
-            "C": "third choice",
-            "D": "fourth choice"
-        },
-        "correct_answer": "A" or "B" or "C" or "D",
-        "explanation": "step-by-step explanation of how to solve the question"
-    }
-    """
-
-    prompt_parts.append(format_instructions)
-
     # Combine all parts
     full_prompt = "\n".join(prompt_parts)
 
-    # Call Claude
-    message = client.messages.create(
+    # Call Claude with structured output
+    response = client.beta.messages.parse(  # type: ignore
         model=CLAUDE_MODEL,
         max_tokens=2500,
+        betas=['structured-outputs-2025-11-13'],
         messages=[
             {
                 "role": "user",
                 "content": full_prompt
             }
-        ]
+        ],
+        output_format=GeneratedQuestion
     )
 
-    response_text = message.content[0].text
-    result = json.loads(response_text)
-
-    return result
+    # Convert Pydantic model to dict (nested models are automatically converted)
+    if response.parsed_output is None:
+        raise ValueError("Failed to parse structured output from Claude response")
+    return response.parsed_output.model_dump()
