@@ -11,7 +11,9 @@ from datetime import datetime, timezone
 import uuid
 
 
-class UserOptions(BaseModel):
+class UserInput(BaseModel):
+    user_image: Optional[str] = None
+    user_description: Optional[str] = None
     requested_section: Optional[Literal["Math", "Reading and Writing"]] = None
     requested_difficulty: Optional[Literal["Easy", "Medium", "Hard"]] = None
     requested_domain: Optional[Literal["Algebra", "Advanced Math", "Problem-Solving and Data Analysis", "Geometry and Trigonometry"]] = None
@@ -49,6 +51,7 @@ class MathQuestionExtraction(BaseModel):
     equation: Optional[str] = Field(None, description="The LaTeX formatted equations of the question")
     table: Optional[TableData] = None
     visual: Optional[str] = None
+    user_comments: Optional[str] = None
 
 class GeneratedQuestion(BaseModel):
     text: str
@@ -56,9 +59,9 @@ class GeneratedQuestion(BaseModel):
     table: Optional[TableData] = None
     visual: Optional[str] = None
 
-    answer_choices: Optional[Dict[str, str]] = None # {"A": "...", "B": "...", etc.}
-    correct_answer: Optional[Literal["A", "B", "C", "D"]] = None
-    explanation: Optional[str] = None
+    answer_choices: Dict[str, str] # {"A": "...", "B": "...", etc.}
+    correct_answer: Literal["A", "B", "C", "D"]
+    explanation: str
 
 class QuestionClassification(BaseModel):
     section: Literal["Math", "Reading and Writing"]
@@ -66,12 +69,10 @@ class QuestionClassification(BaseModel):
     skill: List[str]
     difficulty: Literal["Easy", "Medium", "Hard"]
 
-class QuestionGenerationState(BaseModel):
+class HAIState(BaseModel):
 
     # USER INPUT (from user)
-    user_image: str
-    user_description: str
-    user_options: UserOptions = UserOptions()
+    user_input: UserInput = UserInput()
 
     # EXTRACTED FEATURES (from extract_structure node)
     extracted_features: Optional[MathQuestionExtraction]
@@ -108,11 +109,9 @@ class QuestionGenerationState(BaseModel):
         self.validation_errors = []
 
     @classmethod
-    def create_initial_state(cls, user_image: str, user_description: str, user_options: UserOptions) -> "QuestionGenerationState":
+    def create_initial_state(cls, user_input: UserInput) -> HAIState:
         return cls(
-            user_image=user_image,
-            user_description=user_description,
-            user_options=user_options,
+            user_input=user_input,
             extracted_features= None,
             classified_features= None,
             similar_questions= [],
@@ -122,5 +121,6 @@ class QuestionGenerationState(BaseModel):
             validation_passed= False,
             validation_errors= [],
             workflow_id=str(uuid.uuid4()),
-            started_at=datetime.now(timezone.utc).isoformat()
+            started_at=datetime.now(timezone.utc).isoformat(),
+            error=None
         )

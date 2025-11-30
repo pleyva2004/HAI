@@ -12,13 +12,49 @@ from typing import Dict, Any, List, Optional
 from pydantic import BaseModel
 from anthropic import Anthropic
 
-from backend.config import CLAUDE_MODEL
+from backend.config import CLAUDE_MODEL, CLAUDE_API_KEY
 from backend.workflows.state import BaseQuestion, MathQuestionExtraction, QuestionClassification, GeneratedQuestion
 
 
 # Initialize Claude client
-client = Anthropic()
+client = Anthropic(api_key=CLAUDE_API_KEY)
 
+
+# TODO: Implement this
+# This is called when the user provides a description of the type of question they want to generate
+def extract_from_description(description: str) -> MathQuestionExtraction:
+
+    prompt = f"""
+    Analyze this SAT question description and extract the following information:
+
+    Description: {description}
+
+    Extract:
+    1. The main question text or concept
+    2. Any equations mentioned (convert to LaTeX format)
+    3. Any visual elements described
+    """
+
+    response = client.beta.messages.parse(  # type: ignore
+        model=CLAUDE_MODEL,
+        max_tokens=1000,
+        betas=['structured-outputs-2025-11-13'],
+        messages=[
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ],
+        output_format=MathQuestionExtraction
+    )
+
+    # Convert Pydantic model to dict (nested models are automatically converted)
+    if response.parsed_output is None:
+        print("HAI failed to analyze the description")
+        raise ValueError("Failed to analyze the description")
+    return response.parsed_output # type: ignore
+
+# These are only called when the user provides an image
 def extract_from_image(image_base64: str) -> MathQuestionExtraction:
     prompt = """
     Analyze this SAT question image and extract the following information:
@@ -63,65 +99,19 @@ def extract_from_image(image_base64: str) -> MathQuestionExtraction:
         raise ValueError("Failed to analyze the image")
     return response.parsed_output # type: ignore
 
-
-def extract_from_description(description: str) -> MathQuestionExtraction:
-
-    prompt = f"""
-    Analyze this SAT question description and extract the following information:
-
-    Description: {description}
-
-    Extract:
-    1. The main question text or concept
-    2. Any equations mentioned (convert to LaTeX format)
-    3. Any visual elements described
-    """
-
-    response = client.beta.messages.parse(  # type: ignore
-        model=CLAUDE_MODEL,
-        max_tokens=1000,
-        betas=['structured-outputs-2025-11-13'],
-        messages=[
-            {
-                "role": "user",
-                "content": prompt
-            }
-        ],
-        output_format=MathQuestionExtraction
-    )
-
-    # Convert Pydantic model to dict (nested models are automatically converted)
-    if response.parsed_output is None:
-        print("HAI failed to analyze the description")
-        raise ValueError("Failed to analyze the description")
-    return response.parsed_output # type: ignore
-
-
-def classify_question(extracted_text: str, equation_content: str, visual_description: str) -> Dict[str, Any]:
+def classify_question(extracted_features: str) -> QuestionClassification:
     """
     Classify a question into SAT taxonomy.
 
     Returns dict with keys: section, domain, skill, difficulty
     """
     # Build the content to classify
-    content_parts = []
-
-    if extracted_text:
-        content_parts.append(f"Question: {extracted_text}")
-
-    if equation_content:
-        content_parts.append(f"Equations: {equation_content}")
-
-    if visual_description:
-        content_parts.append(f"Visual: {visual_description}")
-
-    content = "\n".join(content_parts)
 
     prompt = f"""
     Classify this SAT question into the appropriate categories.
 
     Content:
-    {content}
+    {extracted_features}
 
     Classify into:
     - Section: "Math" or "Reading and Writing"
@@ -130,6 +120,7 @@ def classify_question(extracted_text: str, equation_content: str, visual_descrip
     - Difficulty: "Easy", "Medium", or "Hard"
     """
 
+    print("HAI is checking itself")
     response = client.beta.messages.parse(  # type: ignore
         model=CLAUDE_MODEL,
         max_tokens=500,
@@ -137,26 +128,26 @@ def classify_question(extracted_text: str, equation_content: str, visual_descrip
         messages=[
             {
                 "role": "user",
-                "content": prompt
+                "content": [
+                    {
+                        "type": "text",
+                        "text": prompt
+                    }
+                ]
             }
         ],
         output_format=QuestionClassification
     )
 
+    print("HAI is providing final analysis")
+
     # Convert Pydantic model to dict
     if response.parsed_output is None:
         raise ValueError("Failed to parse structured output from Claude response")
-    return response.parsed_output.model_dump()
+    return response.parsed_output # type: ignore
 
+def generate_question(extracted_features: str, classified_features: str, similar_questions: List[BaseQuestion] = []) -> GeneratedQuestion:
 
-def generate_question(user_description: str, section: str, domain: str, difficulty: str, skill: List[str], similar_questions: List[BaseQuestion]) -> Dict[str, Any]:
-    """
-    Generate a new SAT question using Claude.
-
-    Returns dict with question data including:
-    question_text, equation_content, table_data, visual_description,
-    answer_choices, correct_answer, explanation
-    """
 
     # Build the generation prompt
     prompt_parts = []
@@ -171,10 +162,10 @@ def generate_question(user_description: str, section: str, domain: str, difficul
 
         for i, example in enumerate(similar_questions, 1):
             prompt_parts.append(f"EXAMPLE {i}:")
-            prompt_parts.append(f"Question: {example.question_text}")
+            prompt_parts.append(f"Question: {example.text}")
 
-            if example.equation_content:
-                prompt_parts.append(f"Equation: {example.equation_content}")
+            if example.equation:
+                prompt_parts.append(f"Equation: {example.equation}")
 
             if example.answer_choices:
                 prompt_parts.append("Answer Choices:")
@@ -186,34 +177,23 @@ def generate_question(user_description: str, section: str, domain: str, difficul
 
     # Add user request
     prompt_parts.append("USER REQUEST:")
-
-    if user_description:
-        prompt_parts.append(user_description)
-    else:
-        prompt_parts.append("Generate a similar question based on the extracted content.")
-
+    prompt_parts.append(extracted_features)
     prompt_parts.append("")
 
     # Add constraints
     prompt_parts.append("CONSTRAINTS:")
-
-    if section:
-        prompt_parts.append(f"- Section: {section}")
-
-    if domain:
-        prompt_parts.append(f"- Domain: {domain}")
-
-    if difficulty:
-        prompt_parts.append(f"- Difficulty: {difficulty}")
-
-    if skill and len(skill) > 0:
-        skills_text = ", ".join(skill)
-        prompt_parts.append(f"- Skills: {skills_text}")
-
+    prompt_parts.append(classified_features)
     prompt_parts.append("")
 
     # Combine all parts
     full_prompt = "\n".join(prompt_parts)
+
+    print("HAI is the prompt:")
+    print("--------------------------------")
+    print(full_prompt)
+    print("--------------------------------")
+
+    print("HAI is generating the question")
 
     # Call Claude with structured output
     response = client.beta.messages.parse(  # type: ignore
@@ -229,7 +209,10 @@ def generate_question(user_description: str, section: str, domain: str, difficul
         output_format=GeneratedQuestion
     )
 
+    print("HAI finished generating the question")
+
     # Convert Pydantic model to dict (nested models are automatically converted)
     if response.parsed_output is None:
+        print("HAI failed to geenearte the question")
         raise ValueError("Failed to parse structured output from Claude response")
-    return response.parsed_output.model_dump()
+    return response.parsed_output # type: ignore

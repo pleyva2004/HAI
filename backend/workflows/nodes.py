@@ -121,18 +121,12 @@ def generate_question(state: QuestionGenerationState) -> QuestionGenerationState
     difficulty = state.predicted_difficulty if state.predicted_difficulty else "Medium"
     question_text = result.get("question_text", "")
 
-    question = Question(
+    question = GeneratedQuestion(
         section=section,
         domain=domain,
-        skill=state.skill,
         difficulty=difficulty,
         question_text=question_text,
-        equation_content=result.get("equation_content"),
-        table_data=result.get("table_data"),
-        visual_description=result.get("visual_description"),
-        answer_choices=result.get("answer_choices"),
-        correct_answer=result.get("correct_answer"),
-        explanation=result.get("explanation")
+        extracted_features=state.extracted_features
     )
 
     state.generated_question = question

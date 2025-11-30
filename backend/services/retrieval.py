@@ -6,7 +6,7 @@ Uses pgvector for semantic similarity search in the question bank.
 
 from typing import List, Tuple, Optional
 
-from backend.workflows.state import Question
+from backend.workflows.state import BaseQuestion
 from backend.config import RETRIEVAL_LIMIT
 
 
@@ -16,7 +16,7 @@ def retrieve_similar_questions(
     domain: Optional[str] = None,
     difficulty: Optional[str] = None,
     limit: int = RETRIEVAL_LIMIT
-) -> Tuple[List[Question], List[float]]:
+) -> Tuple[List[BaseQuestion], List[float]]:
     """
     Retrieve similar questions from the database using vector similarity.
 
@@ -29,7 +29,7 @@ def retrieve_similar_questions(
 
     Returns:
         (questions, scores)
-        - questions: List of similar Question objects
+        - questions: List of similar BaseQuestion objects
         - scores: List of similarity scores (0-1)
     """
 

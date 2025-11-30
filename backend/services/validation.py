@@ -6,10 +6,10 @@ Validates that generated questions meet quality standards.
 
 from typing import List, Tuple, Optional
 
-from backend.workflows.state import Question
+from backend.workflows.state import GeneratedQuestion
 
 
-def validate_question(question: Optional[Question]) -> Tuple[bool, List[str]]:
+def validate_question(question: Optional[GeneratedQuestion]) -> Tuple[bool, List[str]]:
     """
     Validate a generated question for completeness and correctness.
 
@@ -27,7 +27,7 @@ def validate_question(question: Optional[Question]) -> Tuple[bool, List[str]]:
         return False, errors
 
     # Check for question text
-    if not question.question_text:
+    if not question.text:
         errors.append("Missing question text")
 
     # Check for answer choices
