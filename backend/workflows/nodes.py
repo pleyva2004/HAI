@@ -5,23 +5,24 @@ Each node is a thin orchestration layer that calls services and updates state.
 Nodes should be atomic and delegate actual work to the services layer.
 """
 
-from backend.workflows.state import QuestionGenerationState, BaseQuestion, GeneratedQuestion, MathQuestionExtraction
+from backend.workflows.state import HAIState, GeneratedQuestion, GeneratedQuestion, MathQuestionExtraction, UserInput
 from typing import Optional
+from toon_format import encode
 from backend.services import claude, embeddings, validation, retrieval
 
 
-def extract_structure(state: QuestionGenerationState) -> QuestionGenerationState:
+def extract_structure(state: HAIState) -> HAIState:
 
     # Check what input we have
     extracted_features: Optional[MathQuestionExtraction] = None
 
-    if state.user_image:
+    if state.user_input.image:
         # Extract from image using Claude Vision
-        extracted_features = claude.extract_from_image(state.user_image)
+        extracted_features = claude.extract_from_image(state.user_input.image)
 
-    elif state.user_description:
+    elif state.user_input.description:
         # Extract from text description
-        extracted_features = claude.extract_from_description(state.user_description)
+        extracted_features = claude.extract_from_description(state.user_input.description)
 
     if extracted_features is None:
         state.error = "No image or description provided"
@@ -30,38 +31,20 @@ def extract_structure(state: QuestionGenerationState) -> QuestionGenerationState
 
     return state
 
-    # Get classification from Claude
-    result = claude.classify_question(
-        extracted_text=state.extracted_text,
-        equation_content=state.equation_content,
-        visual_description=state.visual_description
-    )
+def classify_question(state: HAIState) -> HAIState:
+    if state.extracted_features is None:
+        state.error = "No Extracted features to classify"
+        return state
 
-    # Apply user preferences if provided, otherwise use classified values
-    requested_section = state.user_options.requested_section
-    if requested_section:
-        state.section = requested_section
-    else:
-        state.section = result.get("section")
+    encoded_extracted_data = encode(state.extracted_features.model_dump())
 
-    requested_domain = state.user_options.requested_domain
-    if requested_domain:
-        state.predicted_domain = requested_domain
-    else:
-        state.predicted_domain = result.get("domain")
+    res = claude.classify_question(encoded_extracted_data)
 
-    requested_difficulty = state.user_options.requested_difficulty
-    if requested_difficulty:
-        state.predicted_difficulty = requested_difficulty
-    else:
-        state.predicted_difficulty = result.get("difficulty")
-
-    state.skill = result.get("skill", [])
+    state.classified_features = res
 
     return state
 
-
-def retrieve_examples(state: QuestionGenerationState) -> QuestionGenerationState:
+def retrieve_examples(state: HAIState) -> HAIState:
     """
     Find similar questions from the question bank.
 
@@ -71,10 +54,10 @@ def retrieve_examples(state: QuestionGenerationState) -> QuestionGenerationState
 
     # Build query text from extracted features
     query_text = embeddings.build_query_text(
-        extracted_text=state.extracted_text,
-        equation_content=state.equation_content,
-        visual_description=state.visual_description,
-        skills=state.skill
+        extracted_text=state.extracted_features.text if state.extracted_features else None,
+        equation_content=state.extracted_features.equation if state.extracted_features else None,
+        visual_description=state.extracted_features.visual if state.extracted_features else None,
+        skills=state.classified_features.skill if state.classified_features else None
     )
 
     # Generate embedding for the query
@@ -83,9 +66,9 @@ def retrieve_examples(state: QuestionGenerationState) -> QuestionGenerationState
     # Retrieve similar questions from database
     questions, scores = retrieval.retrieve_similar_questions(
         embedding=query_embedding,
-        section=state.section,
-        domain=state.predicted_domain,
-        difficulty=state.predicted_difficulty
+        section=state.classified_features.section if state.classified_features else None,
+        domain=state.classified_features.domain if state.classified_features else None,
+        difficulty=state.classified_features.difficulty if state.classified_features else None
     )
 
     state.similar_questions = questions
@@ -93,8 +76,7 @@ def retrieve_examples(state: QuestionGenerationState) -> QuestionGenerationState
 
     return state
 
-
-def generate_question(state: QuestionGenerationState) -> QuestionGenerationState:
+def generate_question(state: HAIState) -> HAIState:
     """
     Generate a new SAT question.
 
@@ -104,37 +86,23 @@ def generate_question(state: QuestionGenerationState) -> QuestionGenerationState
     # Increment attempt counter
     state.increment_generation_attempt()
 
+    # Encode features for Claude API
+    encoded_extracted_data = encode(state.extracted_features.model_dump()) if state.extracted_features else ""
+    encoded_classified_data = encode(state.classified_features.model_dump()) if state.classified_features else ""
+
     # Generate question using Claude
     result = claude.generate_question(
-        user_description=state.user_description,
-        section=state.section,
-        domain=state.predicted_domain,
-        difficulty=state.predicted_difficulty,
-        skills=state.skill,
+        extracted_features=encoded_extracted_data,
+        classified_features=encoded_classified_data,
         similar_questions=state.similar_questions
     )
 
-    # Create Question object from result
-    # Use defaults if state doesn't have required values
-    section = state.section if state.section else "Math"
-    domain = state.predicted_domain if state.predicted_domain else "Algebra"
-    difficulty = state.predicted_difficulty if state.predicted_difficulty else "Medium"
-    question_text = result.get("question_text", "")
-
-    question = GeneratedQuestion(
-        section=section,
-        domain=domain,
-        difficulty=difficulty,
-        question_text=question_text,
-        extracted_features=state.extracted_features
-    )
-
-    state.generated_question = question
+    # Result is already a GeneratedQuestion object
+    state.generated_question = result
 
     return state
 
-
-def validate_output(state: QuestionGenerationState) -> QuestionGenerationState:
+def validate_output(state: HAIState) -> HAIState:
     """
     Validate the generated question.
 

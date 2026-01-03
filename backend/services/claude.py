@@ -7,6 +7,7 @@ Handles all interactions with the Anthropic Claude API including:
 - Question generation
 """
 
+from time import process_time_ns
 from typing import Dict, Any, List, Optional
 
 from pydantic import BaseModel
@@ -14,6 +15,7 @@ from anthropic import Anthropic
 
 from backend.config import CLAUDE_MODEL, CLAUDE_API_KEY
 from backend.workflows.state import BaseQuestion, MathQuestionExtraction, QuestionClassification, GeneratedQuestion
+from backend.services.parse import parse_generated_question
 
 
 # Initialize Claude client
@@ -63,6 +65,7 @@ def extract_from_image(image_base64: str) -> MathQuestionExtraction:
     2. Any equations or formulas (convert to LaTeX format)
     3. Any table data (as structured JSON)
     4. Description of any graphs, diagrams, or visual elements
+    5. Question Multiple Choice anser selection (as structured JSON)
     """
 
     print("HAI is analyzing the image")
@@ -152,7 +155,7 @@ def generate_question(extracted_features: str, classified_features: str, similar
     # Build the generation prompt
     prompt_parts = []
 
-    prompt_parts.append("You are an expert SAT question writer.")
+    prompt_parts.append("You are an expert SAT question writer. Your task is to generate a new SAT question that follows the same style and structure as an original question, but uses different words, numbers, and context.")
     prompt_parts.append("")
 
     # Add examples if we have them
@@ -176,14 +179,88 @@ def generate_question(extracted_features: str, classified_features: str, similar
             prompt_parts.append("")
 
     # Add user request
-    prompt_parts.append("USER REQUEST:")
+    prompt_parts.append("Here is the original question you will use as a template:")
+
+    prompt_parts.append("<original_question>")
     prompt_parts.append(extracted_features)
-    prompt_parts.append("")
+    prompt_parts.append("</original_question>")
+
+
 
     # Add constraints
-    prompt_parts.append("CONSTRAINTS:")
+    prompt_parts.append("Here are the constraints that your new question must satisfy:")
+
+    prompt_parts.append("<constraints>")
     prompt_parts.append(classified_features)
-    prompt_parts.append("")
+    prompt_parts.append("</constraints>")
+
+
+    # Add Guidelines
+    prompt_parts.append("""Your goal is to create a new question that:
+
+MUST PRESERVE:
+- The same section, domain, skill set, and difficulty level as specified in the constraints
+- The same question structure and format (including table structure if present)
+- The same type of statistical/mathematical concept being tested
+- The same style of answer choices (e.g., if the original has 4 choices A-D, yours should too)
+- Similar complexity and reasoning requirements
+
+MUST CHANGE:
+- All specific numbers and percentages (use different realistic values)
+- The context and scenario (e.g., if the original is about cell phone use, choose a completely different topic like social media habits, study hours, exercise frequency, etc.)
+- All specific terminology and words related to the context
+- The specific categories in any tables (while maintaining the same table dimensions)
+- The wording of answer choices (while testing the same conceptual understanding)
+
+IMPORTANT GUIDELINES:
+- Ensure all numbers are internally consistent (totals must add up correctly in tables)
+- Make the scenario realistic and appropriate for high school students
+- Keep the margin of error concept and interpretation central to the question
+- Ensure answer choices test the same misconceptions and correct understanding as the original""")
+
+    # Add Chain of Thought
+    prompt_parts.append("""Before writing your final question, use a scratchpad to plan out your new scenario and verify your numbers.
+
+<scratchpad>
+Plan your new question here:
+- Choose a new context/scenario
+- Determine new numbers that are realistic and internally consistent
+- Sketch out the table structure with new categories
+- Draft the main question text
+- Create answer choices that parallel the original
+- Double-check all arithmetic
+</scratchpad>""")
+
+    prompt_parts.append("""After planning, provide your complete new question in the following format:
+
+<new_question>
+<text>
+[Write the main question text here, including the scenario and what is being asked]
+</text>
+
+<equation>
+[Write "null" if no equation is needed, otherwise provide the equation]
+</equation>
+
+<table>
+<headers>
+[List all column headers separated by commas]
+</headers>
+<rows>
+[Provide each row of data, with values in quotes separated by commas]
+</rows>
+</table>
+
+<visual>
+[Write "null" if no visual is needed, otherwise describe it]
+</visual>
+
+<answer_choices>
+[List each answer choice as A., B., C., D., etc.]
+</answer_choices>
+</new_question>
+
+Make sure your question is completely original in content while maintaining the exact same educational objectives and difficulty level as the original.""")
 
     # Combine all parts
     full_prompt = "\n".join(prompt_parts)
@@ -195,24 +272,30 @@ def generate_question(extracted_features: str, classified_features: str, similar
 
     print("HAI is generating the question")
 
-    # Call Claude with structured output
-    response = client.beta.messages.parse(  # type: ignore
+    # General Claude API call without structured output
+    response = client.beta.messages.create(  # type: ignore
         model=CLAUDE_MODEL,
         max_tokens=2500,
-        betas=['structured-outputs-2025-11-13'],
         messages=[
             {
                 "role": "user",
                 "content": full_prompt
             }
-        ],
-        output_format=GeneratedQuestion
+        ]
     )
 
     print("HAI finished generating the question")
 
-    # Convert Pydantic model to dict (nested models are automatically converted)
-    if response.parsed_output is None:
-        print("HAI failed to geenearte the question")
-        raise ValueError("Failed to parse structured output from Claude response")
-    return response.parsed_output # type: ignore
+    # Extract text content from response and parse it
+    if response.content and len(response.content) > 0:
+        text_content = getattr(response.content[0], "text", None)
+        if text_content:
+            print("HAI is parsing the generated question")
+            print("--------------------------------")
+            print(text_content)
+            print("--------------------------------")
+            return parse_generated_question(text_content)
+        else:
+            raise ValueError("Response content is not text")
+    else:
+        raise ValueError("No content in Claude response")

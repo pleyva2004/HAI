@@ -24,6 +24,7 @@ def main():
 
     # Convert JSON string to dict
     mock_API_dict = json.loads(mock_API_request)
+
     # Create a UserInput object from the dict
     user_input = UserInput(**mock_API_dict)
 

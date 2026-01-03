@@ -12,8 +12,8 @@ import uuid
 
 
 class UserInput(BaseModel):
-    user_image: Optional[str] = None
-    user_description: Optional[str] = None
+    image: Optional[str] = None
+    description: Optional[str] = None
     requested_section: Optional[Literal["Math", "Reading and Writing"]] = None
     requested_difficulty: Optional[Literal["Easy", "Medium", "Hard"]] = None
     requested_domain: Optional[Literal["Algebra", "Advanced Math", "Problem-Solving and Data Analysis", "Geometry and Trigonometry"]] = None
@@ -24,6 +24,9 @@ class UserInput(BaseModel):
 class TableData(BaseModel):
     headers: List[str]
     rows: List[List[str]]
+
+class AnswerChoices(BaseModel):
+    choices: List[str]
 
 class BaseQuestion(BaseModel):
 
@@ -51,7 +54,7 @@ class MathQuestionExtraction(BaseModel):
     equation: Optional[str] = Field(None, description="The LaTeX formatted equations of the question")
     table: Optional[TableData] = None
     visual: Optional[str] = None
-    user_comments: Optional[str] = None
+    answer_choices: Optional[AnswerChoices] = None
 
 class GeneratedQuestion(BaseModel):
     text: str
@@ -60,8 +63,8 @@ class GeneratedQuestion(BaseModel):
     visual: Optional[str] = None
 
     answer_choices: Dict[str, str] # {"A": "...", "B": "...", etc.}
-    correct_answer: Literal["A", "B", "C", "D"]
-    explanation: str
+    correct_answer: Optional[Literal["A", "B", "C", "D"]] = None
+    explanation: Optional[str] = None
 
 class QuestionClassification(BaseModel):
     section: Literal["Math", "Reading and Writing"]
