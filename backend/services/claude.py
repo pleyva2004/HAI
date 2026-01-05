@@ -13,7 +13,14 @@ from typing import Dict, Any, List, Optional
 from pydantic import BaseModel
 from anthropic import Anthropic
 
-from backend.config import CLAUDE_MODEL, CLAUDE_API_KEY
+from backend.config import (
+    CLAUDE_MODEL,
+    CLAUDE_API_KEY,
+    CLAUDE_MAX_TOKENS_DESCRIPTION_EXTRACTION,
+    CLAUDE_MAX_TOKENS_IMAGE_EXTRACTION,
+    CLAUDE_MAX_TOKENS_CLASSIFICATION,
+    CLAUDE_MAX_TOKENS_GENERATION
+)
 from backend.workflows.state import BaseQuestion, MathQuestionExtraction, QuestionClassification, GeneratedQuestion
 from backend.services.parse import parse_generated_question
 
@@ -39,7 +46,7 @@ def extract_from_description(description: str) -> MathQuestionExtraction:
 
     response = client.beta.messages.parse(  # type: ignore
         model=CLAUDE_MODEL,
-        max_tokens=1000,
+        max_tokens=CLAUDE_MAX_TOKENS_DESCRIPTION_EXTRACTION,
         betas=['structured-outputs-2025-11-13'],
         messages=[
             {
@@ -71,7 +78,7 @@ def extract_from_image(image_base64: str) -> MathQuestionExtraction:
     print("HAI is analyzing the image")
     response = client.beta.messages.parse(  # type: ignore
         model=CLAUDE_MODEL,
-        max_tokens=2000,
+        max_tokens=CLAUDE_MAX_TOKENS_IMAGE_EXTRACTION,
         betas=['structured-outputs-2025-11-13'],
         messages=[
             {
@@ -126,7 +133,7 @@ def classify_question(extracted_features: str) -> QuestionClassification:
     print("HAI is checking itself")
     response = client.beta.messages.parse(  # type: ignore
         model=CLAUDE_MODEL,
-        max_tokens=500,
+        max_tokens=CLAUDE_MAX_TOKENS_CLASSIFICATION,
         betas=['structured-outputs-2025-11-13'],
         messages=[
             {
@@ -155,6 +162,7 @@ def generate_question(extracted_features: str, classified_features: str, similar
     # Build the generation prompt
     prompt_parts = []
 
+    # Setting the ROLE
     prompt_parts.append("You are an expert SAT question writer. Your task is to generate a new SAT question that follows the same style and structure as an original question, but uses different words, numbers, and context.")
     prompt_parts.append("")
 
@@ -178,7 +186,7 @@ def generate_question(extracted_features: str, classified_features: str, similar
             prompt_parts.append(f"Correct Answer: {example.correct_answer}")
             prompt_parts.append("")
 
-    # Add user request
+    # Add example
     prompt_parts.append("Here is the original question you will use as a template:")
 
     prompt_parts.append("<original_question>")
@@ -275,7 +283,7 @@ Make sure your question is completely original in content while maintaining the 
     # General Claude API call without structured output
     response = client.beta.messages.create(  # type: ignore
         model=CLAUDE_MODEL,
-        max_tokens=2500,
+        max_tokens=CLAUDE_MAX_TOKENS_GENERATION,
         messages=[
             {
                 "role": "user",

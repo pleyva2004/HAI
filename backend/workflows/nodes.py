@@ -5,10 +5,11 @@ Each node is a thin orchestration layer that calls services and updates state.
 Nodes should be atomic and delegate actual work to the services layer.
 """
 
-from backend.workflows.state import HAIState, GeneratedQuestion, GeneratedQuestion, MathQuestionExtraction, UserInput
+from backend.workflows.state import HAIState, MathQuestionExtraction
 from typing import Optional
 from toon_format import encode
 from backend.services import claude, embeddings, validation, retrieval
+from backend.config import MAX_GENERATION_ATTEMPTS
 
 
 def extract_structure(state: HAIState) -> HAIState:
@@ -120,3 +121,34 @@ def validate_output(state: HAIState) -> HAIState:
         state.validation_errors = errors
 
     return state
+
+
+#TODO: Implement CHATGPT Answering question and juding fairness
+def is_question_fair(state: HAIState) -> HAIState:
+    return state
+
+
+#TODO: implemented LLM Call to create latex out of the question we generated in-order for the frotned to render tables, equations and visuals nicely.
+#### HIGH PRIORITY WILL BE IMPLEMENTED NEXT
+def conver_latex(state: HAIState) -> HAIState:
+    return state
+
+
+def should_validate(state: HAIState) -> str:
+
+    # Always validate unless uxer declines
+    # To-Do: give user option in the UI
+    # skip_validation option not currently in UserInput model
+    return "validate"
+
+def validation_decision(state: HAIState) -> str:
+
+    # If validation passed, we're done
+    if state.validation_passed:
+        return "success"
+
+    # If we've tried too many times, give up
+    if state.generation_attempt >= MAX_GENERATION_ATTEMPTS:
+        return "failed"
+
+    return "regenerate"

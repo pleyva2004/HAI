@@ -3,7 +3,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from backend.api.routes import router
-from backend.database.connection import init_database
+# from backend.database.connection import init_database
 
 app = FastAPI(title="HAI - Hilltop AI")
 

@@ -50,19 +50,14 @@ def validate_question(question: Optional[GeneratedQuestion]) -> Tuple[bool, List
             if not choice_text:
                 errors.append(f"Answer choice {choice_label} is empty")
 
-    # Check for correct answer
-    if not question.correct_answer:
-        errors.append("Missing correct answer")
-    else:
-        # Verify correct answer is one of the choices
-        if question.answer_choices:
-            valid_answers = ["A", "B", "C", "D"]
-            if question.correct_answer not in valid_answers:
-                errors.append(f"Invalid correct answer: {question.correct_answer}")
+    # Check for correct answer (optional field - only validate if present)
+    if question.correct_answer:
+        # Verify correct answer is one of the valid choices
+        valid_answers = ["A", "B", "C", "D"]
+        if question.correct_answer not in valid_answers:
+            errors.append(f"Invalid correct answer: {question.correct_answer}")
 
-    # Check for explanation
-    if not question.explanation:
-        errors.append("Missing explanation")
+    # Note: explanation is optional, no validation required
 
     # Determine if valid
     is_valid = len(errors) == 0

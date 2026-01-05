@@ -6,6 +6,36 @@ This document outlines the agent workflow for the SAT practice question generato
 
 ---
 
+## Current Implementation Status
+
+> **Last Updated**: January 2025
+
+| Node | Status | Notes |
+|------|--------|-------|
+| `extract_structure` | ✅ Implemented | Uses Claude Vision with structured outputs |
+| `classify_question` | ✅ Implemented | Uses Claude with structured outputs |
+| `retrieve_examples` | ⏸️ Stub | Returns empty list - RAG disabled until question bank data is collected |
+| `generate_question` | ✅ Implemented | Uses Claude + `parse.py` for response parsing |
+| `validate_output` | ✅ Implemented | Lenient mode - `correct_answer` and `explanation` are optional |
+
+### Services
+
+| Service | File | Status |
+|---------|------|--------|
+| Claude API | `backend/services/claude.py` | ✅ Implemented |
+| Response Parser | `backend/services/parse.py` | ✅ Implemented |
+| Embeddings | `backend/services/embeddings.py` | ✅ Implemented |
+| Retrieval | `backend/services/retrieval.py` | ⏸️ Stub - pending question bank |
+| Validation | `backend/services/validation.py` | ✅ Implemented (lenient mode) |
+
+### Known Limitations
+
+1. **RAG Retrieval Disabled**: The `retrieve_examples` node currently returns empty results. Question bank data collection is pending.
+2. **Optional Fields**: `correct_answer` and `explanation` are not extracted from Claude's response. Validation skips these checks.
+3. **Graph Definition**: `backend/workflows/graph.py` needs to be implemented with LangGraph.
+
+---
+
 ## Workflow Architecture
 
 ```
@@ -54,59 +84,52 @@ This document outlines the agent workflow for the SAT practice question generato
 
 ## State Schema
 
-The workflow maintains a shared state object that flows through each node:
+The workflow maintains a shared state object (`HAIState`) that flows through each node. The state is built using Pydantic models for type safety and validation:
 
 ```python
-class QuestionGenerationState(TypedDict):
+class HAIState(BaseModel):
     # ═══════════════════════════════════════
-    # INPUT (from user)
+    # USER INPUT (from user)
     # ═══════════════════════════════════════
-    user_image: Optional[str]              # base64 encoded screenshot
-    user_description: Optional[str]        # text description of desired question
-    user_options: dict                     # { difficulty, topic, section }
-    
+    user_input: UserInput
+
     # ═══════════════════════════════════════
-    # EXTRACTED FEATURES (from extract_structure)
+    # EXTRACTED FEATURES (from extract_structure node)
     # ═══════════════════════════════════════
-    extracted_text: Optional[str]          # main question text
-    equation_content: Optional[str]        # LaTeX formatted equations
-    table_data: Optional[dict]             # structured table JSON
-    visual_description: Optional[str]      # description of graphs/figures
-    
+    extracted_features: Optional[MathQuestionExtraction]
+
     # ═══════════════════════════════════════
-    # CLASSIFICATION (from classify_question)
+    # CLASSIFICATION (from classify_question node)
     # ═══════════════════════════════════════
-    question_type: Optional[str]           # 'algebra', 'geometry', etc.
-    sat_section: Optional[str]             # 'math' or 'reading_writing'
-    sat_subsection: Optional[str]          # 'heart_of_algebra', etc.
-    difficulty: Optional[str]              # 'easy', 'medium', 'hard'
-    topics: List[str]                      # ['quadratic equations', 'factoring']
-    
+    classified_features: Optional[QuestionClassification]
+
     # ═══════════════════════════════════════
-    # RETRIEVED CONTEXT (from retrieve_examples)
+    # RETRIEVED CONTEXT (from retrieve_examples node)
     # ═══════════════════════════════════════
-    similar_questions: List[dict]          # 3-5 similar questions from bank
-    retrieval_scores: List[float]          # similarity scores
-    
+    similar_questions: List[BaseQuestion]
+    retrieval_scores: List[float]
+
     # ═══════════════════════════════════════
-    # GENERATED OUTPUT (from generate_question)
+    # GENERATED OUTPUT (from generate_question node)
     # ═══════════════════════════════════════
-    generated_question: Optional[dict]     # complete question object
-    generation_attempt: int                # retry counter
-    
+    generated_question: Optional[GeneratedQuestion]
+    generation_attempt: int
+
     # ═══════════════════════════════════════
-    # VALIDATION (from validate_output)
+    # VALIDATION (from validate_output node)
     # ═══════════════════════════════════════
     validation_passed: bool
     validation_errors: List[str]
-    
+
     # ═══════════════════════════════════════
-    # METADATA
+    # WORKFLOW METADATA
     # ═══════════════════════════════════════
     workflow_id: str
     started_at: str
     error: Optional[str]
 ```
+
+> **Note**: The state uses supporting Pydantic models (`UserInput`, `MathQuestionExtraction`, `QuestionClassification`, `GeneratedQuestion`, `BaseQuestion`, etc.) which are defined in `backend/workflows/state.py`.
 
 ---
 
@@ -117,38 +140,46 @@ class QuestionGenerationState(TypedDict):
 **Purpose**: Extract structured information from user input (image or text description)
 
 **Inputs**:
-- `user_image` (optional)
-- `user_description` (optional)
+- `state.user_input.image` (optional) - base64 encoded image
+- `state.user_input.description` (optional) - text description
 
 **Processing**:
-1. If `user_image` exists:
-   - Send to Claude Vision API
-   - Prompt: "Extract the following from this SAT question: question text, any equations (as LaTeX), table data (as JSON), and describe any visual elements"
-   - Parse structured response
+1. If `state.user_input.image` exists:
+   - Call `claude.extract_from_image()` with base64 image
+   - Uses Claude Vision API with structured output parsing
+   - Returns `MathQuestionExtraction` object
 
-2. If only `user_description` exists:
-   - Use Claude to parse and structure the description
-   - Infer likely question components
+2. If only `state.user_input.description` exists:
+   - Call `claude.extract_from_description()` with description text
+   - Uses Claude to parse and structure the description
+   - Returns `MathQuestionExtraction` object
+
+3. If neither exists, set `state.error = "No image or description provided"`
 
 **Outputs**:
-- `extracted_text`
-- `equation_content`
-- `table_data`
-- `visual_description`
+- `state.extracted_features` (MathQuestionExtraction) containing:
+  - `text`: main question text
+  - `equation`: LaTeX formatted equations (optional)
+  - `table`: TableData object with headers and rows (optional)
+  - `visual`: description of graphs/figures (optional)
+  - `answer_choices`: AnswerChoices object (optional)
 
 **Example Trace in LangSmith**:
 ```
 Node: extract_structure
-Input: { user_image: "base64...", user_description: null }
-LLM Call: Claude Vision (claude-sonnet-4-5)
+Input: { user_input: { image: "base64...", description: null } }
+LLM Call: Claude Vision (structured output)
   Prompt tokens: 1245
   Completion tokens: 312
   Duration: 2.3s
 Output: {
-  extracted_text: "A ball is thrown upward...",
-  equation_content: "h = -16t^2 + 64t",
-  table_data: null,
-  visual_description: null
+  extracted_features: {
+    text: "A ball is thrown upward...",
+    equation: "h = -16t^2 + 64t",
+    table: null,
+    visual: null,
+    answer_choices: { choices: ["A. ...", "B. ...", ...] }
+  }
 }
 ```
 
@@ -159,58 +190,36 @@ Output: {
 **Purpose**: Classify the question into SAT taxonomy
 
 **Inputs**:
-- `extracted_text`
-- `equation_content`
-- `visual_description`
-- `user_options` (may include explicit difficulty/topic)
+- `state.extracted_features` (MathQuestionExtraction) - required
 
 **Processing**:
-1. Build classification prompt with extracted features
-2. Call Claude with few-shot examples of SAT taxonomy
-3. Parse structured classification response
+1. Check if `state.extracted_features` exists, otherwise set error and return
+2. Convert to dict with `.model_dump()` then encode using TOON format: `encode(state.extracted_features.model_dump())`
+3. Call `claude.classify_question()` with encoded extracted data
+4. Uses Claude with structured output parsing to return `QuestionClassification`
 
 **Outputs**:
-- `question_type`
-- `sat_section`
-- `sat_subsection`
-- `difficulty`
-- `topics`
-
-**System Prompt**:
-```
-You are an SAT question classifier. Based on the provided question content,
-classify it into the SAT taxonomy:
-
-Question Types: algebra, geometry, data_analysis, reading, writing
-Sections: math, reading_writing
-Subsections (Math): heart_of_algebra, passport_to_advanced_math, 
-                    problem_solving_data_analysis, additional_topics
-Difficulty: easy, medium, hard
-
-Return JSON format:
-{
-  "question_type": "...",
-  "sat_section": "...",
-  "sat_subsection": "...",
-  "difficulty": "...",
-  "topics": ["topic1", "topic2"]
-}
-```
+- `state.classified_features` (QuestionClassification) containing:
+  - `section`: "Math" or "Reading and Writing"
+  - `domain`: "Algebra", "Advanced Math", "Problem-Solving and Data Analysis", or "Geometry and Trigonometry"
+  - `skill`: List of specific skills tested
+  - `difficulty`: "Easy", "Medium", or "Hard"
 
 **Example Trace in LangSmith**:
 ```
 Node: classify_question
-Input: { extracted_text: "A ball is thrown upward...", equation_content: "h = -16t^2 + 64t" }
-LLM Call: Claude (claude-sonnet-4-5)
+Input: { extracted_features: { text: "A ball is thrown upward...", equation: "h = -16t^2 + 64t" } }
+LLM Call: Claude (structured output)
   Prompt tokens: 456
   Completion tokens: 89
   Duration: 0.8s
 Output: {
-  question_type: "algebra",
-  sat_section: "math",
-  sat_subsection: "passport_to_advanced_math",
-  difficulty: "medium",
-  topics: ["quadratic equations", "projectile motion", "factoring"]
+  classified_features: {
+    section: "Math",
+    domain: "Advanced Math",
+    skill: ["quadratic equations", "projectile motion", "factoring"],
+    difficulty: "Medium"
+  }
 }
 ```
 
@@ -218,45 +227,35 @@ Output: {
 
 ### Node 3: `retrieve_examples`
 
+> ⚠️ **Currently Stub**: This node returns empty results. RAG retrieval is disabled until question bank data is collected.
+
 **Purpose**: Find similar questions from the question bank using RAG
 
 **Inputs**:
-- `extracted_text`
-- `equation_content`
-- `visual_description`
-- `question_type`
-- `sat_subsection`
-- `difficulty`
-- `user_options` (filters)
+- `state.extracted_features` (MathQuestionExtraction) - for query text
+- `state.classified_features` (QuestionClassification) - for filtering
 
-**Processing**:
-1. Create embedding query:
-   ```python
-   query_text = f"""
-   Question: {extracted_text}
-   Equations: {equation_content}
-   Visual: {visual_description}
-   Topics: {', '.join(topics)}
-   """
-   ```
+**Processing** (when implemented):
+1. Build query text using `embeddings.build_query_text()`:
+   - `extracted_text`: from `state.extracted_features.text`
+   - `equation_content`: from `state.extracted_features.equation`
+   - `visual_description`: from `state.extracted_features.visual`
+   - `skills`: from `state.classified_features.skill`
 
-2. Generate embedding using `text-embedding-3-small`
+2. Generate embedding using `embeddings.generate_embedding()` with OpenAI
 
-3. Query PostgreSQL with pgvector:
-   ```sql
-   SELECT * FROM questions
-   WHERE question_type = ?
-     AND sat_subsection = ?
-     AND difficulty = ?
-   ORDER BY embedding <=> ?
-   LIMIT 5;
-   ```
+3. Query database using `retrieval.retrieve_similar_questions()`:
+   - Filter by `section`, `domain`, and `difficulty` from `state.classified_features`
+   - Use vector similarity search with pgvector
+   - Return top N most similar questions
 
-4. Return top 3-5 most similar questions
+**Current Output** (stub):
+- `state.similar_questions`: Empty list `[]`
+- `state.retrieval_scores`: Empty list `[]`
 
-**Outputs**:
-- `similar_questions` (list of complete question objects)
-- `retrieval_scores` (cosine similarity scores)
+**Outputs** (when implemented):
+- `state.similar_questions`: List[BaseQuestion] - similar questions from bank
+- `state.retrieval_scores`: List[float] - similarity scores for each question
 
 **Example Trace in LangSmith**:
 ```
@@ -286,97 +285,52 @@ Output: {
 **Purpose**: Generate a new SAT question using retrieved examples as few-shot context
 
 **Inputs**:
-- `similar_questions`
-- `extracted_text` (if from image)
-- `user_description` (if provided)
-- `question_type`
-- `difficulty`
-- `topics`
+- `state.extracted_features` (MathQuestionExtraction) - original question template
+- `state.classified_features` (QuestionClassification) - classification constraints
+- `state.similar_questions` (List[BaseQuestion]) - similar examples for few-shot
 
 **Processing**:
-1. Build generation prompt with:
-   - System instructions for SAT question format
-   - 3-5 retrieved examples as few-shot demonstrations
-   - User's specific request/modifications
-   - Structural constraints (answer choices, explanation, etc.)
-
-2. Call Claude for generation
-
-3. Parse response into structured format
-
-**System Prompt Template**:
-```
-You are an expert SAT question writer. Generate a new SAT {question_type} question
-that follows these examples:
-
-EXAMPLE 1:
-{similar_question_1}
-
-EXAMPLE 2:
-{similar_question_2}
-
-EXAMPLE 3:
-{similar_question_3}
-
-USER REQUEST:
-{user_description}
-
-CONSTRAINTS:
-- Question type: {question_type}
-- Difficulty: {difficulty}
-- Topics: {topics}
-- Must include: question text, 4 answer choices (A-D), correct answer, detailed explanation
-
-OUTPUT FORMAT:
-{
-  "question": {
-    "text": "...",
-    "equation_latex": "..." (if applicable),
-    "visual_description": "..." (if applicable),
-    "table_data": {...} (if applicable)
-  },
-  "answer_choices": {
-    "A": "...",
-    "B": "...",
-    "C": "...",
-    "D": "..."
-  },
-  "correct_answer": "A/B/C/D",
-  "explanation": "Step-by-step solution...",
-  "metadata": {
-    "type": "...",
-    "section": "...",
-    "subsection": "...",
-    "difficulty": "...",
-    "topics": [...]
-  }
-}
-```
+1. Increment `state.generation_attempt` counter
+2. Encode `state.extracted_features` and `state.classified_features` using TOON format
+3. Call `claude.generate_question()` with:
+   - `extracted_features`: encoded extracted features (original question template)
+   - `classified_features`: encoded classification (constraints)
+   - `similar_questions`: list of similar BaseQuestion objects for few-shot examples
+4. Claude generates a new question following the template and constraints
+5. Response is parsed using `parse_generated_question()` to create `GeneratedQuestion` object
 
 **Outputs**:
-- `generated_question` (complete question object)
-- `generation_attempt` (incremented)
+- `state.generated_question` (GeneratedQuestion) containing:
+  - `text`: question text
+  - `equation`: LaTeX formatted equations (optional)
+  - `table`: TableData object (optional)
+  - `visual`: description of graphs/figures (optional)
+  - `answer_choices`: Dict[str, str] with choices A-D
+  - `correct_answer`: "A", "B", "C", or "D" (optional)
+  - `explanation`: step-by-step solution (optional)
+- `state.generation_attempt`: incremented counter
 
 **Example Trace in LangSmith**:
 ```
 Node: generate_question
 Input: {
-  similar_questions: [...],
-  user_description: "Create a quadratic word problem about projectile motion",
-  difficulty: "medium"
+  extracted_features: { text: "...", equation: "..." },
+  classified_features: { section: "Math", domain: "Algebra", ... },
+  similar_questions: [BaseQuestion(...), ...]
 }
-LLM Call: Claude (claude-sonnet-4-5)
+LLM Call: Claude (non-streaming)
   Prompt tokens: 3456
   Completion tokens: 512
   Duration: 3.1s
 Output: {
   generated_question: {
-    question: { text: "A ball is thrown...", equation_latex: "..." },
-    answer_choices: {...},
+    text: "A ball is thrown...",
+    equation: "h = -16t^2 + 64t",
+    answer_choices: {"A": "...", "B": "...", "C": "...", "D": "..."},
     correct_answer: "B",
-    explanation: "...",
-    metadata: {...}
-  }
+    explanation: "..."
+  },
+  generation_attempt: 1
 }
 ```
 
@@ -387,28 +341,27 @@ Output: {
 **Purpose**: Validate the generated question meets quality standards
 
 **Inputs**:
-- `generated_question`
+- `state.generated_question` (GeneratedQuestion)
 
 **Processing**:
-1. **Structural validation**:
-   - Has question text?
-   - Has 4 answer choices labeled A-D?
-   - Has correct answer specified?
-   - Has explanation?
+1. Call `validation.validate_question(state.generated_question)`
+2. Validation service performs checks (lenient mode):
+   - ✅ Question exists
+   - ✅ Has question text
+   - ✅ Has exactly 4 answer choices (A, B, C, D)
+   - ✅ Each answer choice has content
+   - ⏸️ `correct_answer` - only validated if present (optional)
+   - ⏸️ `explanation` - skipped (optional)
+3. Returns tuple: `(is_valid: bool, errors: List[str])`
+4. Update state:
+   - If valid: call `state.mark_validation_passed()`
+   - If invalid: set `state.validation_passed = False` and `state.validation_errors = errors`
 
-2. **Content validation**:
-   - Equation syntax valid (if present)?
-   - Table data well-formed (if present)?
-   - Answer choice lengths reasonable?
-   - Explanation references the correct answer?
-
-3. **Logical validation** (optional, slower):
-   - Use Claude to verify: "Does the explanation correctly solve for the stated correct answer?"
-   - Check for mathematical consistency
+> **Note**: Validation runs in lenient mode. `correct_answer` and `explanation` are optional fields since they are not currently extracted from Claude's response.
 
 **Outputs**:
-- `validation_passed` (boolean)
-- `validation_errors` (list of issues found)
+- `state.validation_passed` (boolean)
+- `state.validation_errors` (list of issues found)
 
 **Conditional Logic**:
 ```python
@@ -423,19 +376,19 @@ else:
 **Example Trace in LangSmith**:
 ```
 Node: validate_output
-Input: { generated_question: {...} }
-Validation Checks:
+Input: { generated_question: GeneratedQuestion(...) }
+Validation Service Call (lenient mode):
+  ✓ Question exists
   ✓ Has question text
-  ✓ Has 4 answer choices
-  ✓ Has correct answer
-  ✓ Has explanation
-  ✓ Equation syntax valid
-  ✗ Explanation doesn't reference correct answer
+  ✓ Has 4 answer choices (A, B, C, D)
+  ✓ Each choice has content
+  ⏸ correct_answer: skipped (optional, not present)
+  ⏸ explanation: skipped (optional)
 Output: {
-  validation_passed: false,
-  validation_errors: ["Explanation references answer C but correct answer is B"]
+  validation_passed: true,
+  validation_errors: []
 }
-Decision: regenerate (attempt 2/3)
+Decision: success → END
 ```
 
 ---
@@ -447,13 +400,12 @@ Decision: regenerate (attempt 2/3)
 After `generate_question`, decide whether to validate:
 
 ```python
-def should_validate(state: QuestionGenerationState) -> str:
+def should_validate(state: HAIState) -> str:
     """Decide whether to run validation or skip to end"""
-    
+
     # Always validate unless user explicitly disabled it
-    if state["user_options"].get("skip_validation"):
-        return "end"
-    
+    # Note: skip_validation option not currently in UserInput model
+    # Could be added if needed
     return "validate"
 ```
 
@@ -468,17 +420,17 @@ def should_validate(state: QuestionGenerationState) -> str:
 After `validate_output`, decide whether to accept or regenerate:
 
 ```python
-def validation_decision(state: QuestionGenerationState) -> str:
+def validation_decision(state: HAIState) -> str:
     """Decide whether to regenerate or accept output"""
-    
+
     # If validation passed, we're done
-    if state["validation_passed"]:
+    if state.validation_passed:
         return "success"
-    
+
     # If we've tried too many times, give up
-    if state["generation_attempt"] >= 3:
+    if state.generation_attempt >= 3:
         return "failed"
-    
+
     # Otherwise, try again
     return "regenerate"
 ```
@@ -494,9 +446,10 @@ def validation_decision(state: QuestionGenerationState) -> str:
 
 ```python
 from langgraph.graph import StateGraph, END
+from backend.workflows.state import HAIState
 
 # Initialize graph
-workflow = StateGraph(QuestionGenerationState)
+workflow = StateGraph(HAIState)
 
 # Add nodes
 workflow.add_node("extract_structure", extract_structure_node)
@@ -542,75 +495,96 @@ app = workflow.compile()
 ## FastAPI Integration
 
 ```python
-from fastapi import FastAPI, UploadFile, HTTPException
-from pydantic import BaseModel
+from fastapi import APIRouter, UploadFile, HTTPException
+from backend.workflows.state import HAIState, UserInput
+from backend.workflows.graph import agent
 import base64
 
-app = FastAPI()
+router = APIRouter()
 
-class GenerateRequest(BaseModel):
-    image: Optional[str] = None  # base64
-    description: Optional[str] = None
-    options: dict = {}
-
-@app.post("/api/generate")
-async def generate_question(request: GenerateRequest):
+@router.post("/generate")
+async def generate_question(request: UserInput):
     """Main endpoint for question generation"""
-    
+
     # Validate input
     if not request.image and not request.description:
         raise HTTPException(400, "Must provide either image or description")
-    
-    # Initialize workflow state
-    initial_state = {
-        "user_image": request.image,
-        "user_description": request.description,
-        "user_options": request.options,
-        "generation_attempt": 0,
-        "workflow_id": generate_uuid(),
-        "started_at": datetime.utcnow().isoformat()
-    }
-    
+
+    # Initialize workflow state using factory method
+    initial_state = HAIState.create_initial_state(request)
+
     # Run the workflow
     try:
-        result = await app.ainvoke(initial_state)
-        
-        # Check if workflow succeeded
-        if not result.get("validation_passed") and result.get("validation_errors"):
-            raise HTTPException(500, f"Generation failed: {result['validation_errors']}")
-        
-        # Store in database
-        question_id = await store_generated_question(
-            question=result["generated_question"],
-            source_ids=[q["id"] for q in result["similar_questions"]],
-            user_prompt=request.description,
-            user_image=request.image
-        )
-        
+        # LangGraph returns dictionary that needs to be processed into pydantic model
+        result_unprocess = await agent.ainvoke(initial_state)
+        result = HAIState.model_validate(result_unprocess)
+
+        # Check for errors first (early failures)
+        if result.error:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Workflow error: {result.error}"
+            )
+
+        # Check if workflow succeeded (validation)
+        if not result.validation_passed and result.validation_errors:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Generation failed after {result.generation_attempt} attempts: {result.validation_errors}"
+            )
+
+        # Check if we failed to generate question
+        if not result.generated_question:
+            raise HTTPException(
+                status_code=500,
+                detail="No question was generated"
+            )
+
+        # TODO: Store in database when implemented
+        # question_id = await store_generated_question(
+        #     question=result.generated_question,
+        #     source_ids=[q.id for q in result.similar_questions],
+        #     user_prompt=request.description,
+        #     user_image=request.image
+        # )
+
         # Return result
         return {
-            "id": question_id,
-            "question": result["generated_question"],
+            "question": result.generated_question.model_dump(),
             "metadata": {
-                "workflow_id": result["workflow_id"],
-                "similar_questions_used": len(result["similar_questions"]),
-                "generation_attempts": result["generation_attempt"]
+                "workflow_id": result.workflow_id,
+                "number_similar_questions_used": len(result.similar_questions),
+                "similar_questions_used": result.similar_questions,
+                "generate_attempts": result.generation_attempt,
+                "validation_passed": result.validation_passed
             }
         }
-        
+
+    except HTTPException:
+        raise
+
     except Exception as e:
         # LangSmith will capture full trace even on error
-        raise HTTPException(500, f"Workflow error: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Workflow error: {str(e)}"
+        )
 
 
-@app.post("/api/upload-screenshot")
+@router.post("/upload-screenshot")
 async def upload_screenshot(file: UploadFile):
     """Handle file upload and convert to base64"""
-    
+
     contents = await file.read()
     base64_image = base64.b64encode(contents).decode('utf-8')
-    
+
     return {"image": base64_image}
+```
+
+**Note**: In `main.py`, include the router with the `/api` prefix:
+```python
+from backend.api.routes import router
+app.include_router(router, prefix="/api")
 ```
 
 ---
@@ -732,7 +706,7 @@ workflow.add_conditional_edges(
 async def tutor_review_node(state: QuestionGenerationState):
     # Workflow pauses here until tutor responds
     feedback = await wait_for_tutor_input(state["workflow_id"])
-    
+
     if feedback["action"] == "approve":
         state["validation_passed"] = True
         return state
