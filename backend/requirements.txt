@@ -10,3 +10,4 @@ pgvector>=0.2.0
 langgraph>=0.0.20
 langchain-core>=0.1.23
 langsmith>=0.0.87
+python-multipart>=0.0.9
