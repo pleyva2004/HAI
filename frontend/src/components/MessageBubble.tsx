@@ -55,11 +55,11 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
                 {message.question && (
                     <div className="w-full mt-4 animate-in fade-in zoom-in-95 duration-500 delay-150">
                         <div className="transform transition-all hover:scale-[1.005] duration-300">
-                            <QuestionCard question={message.question.question} />
-                        </div>
-                        <div className="flex items-center gap-2 text-[10px] text-gray-400 mt-2 pl-2 font-medium uppercase tracking-wider">
-                            <span className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.4)]"></span>
-                            Generated • Attempt {message.question.metadata.generate_attempts}
+                            <QuestionCard
+                                question={message.question.question}
+                                attemptCount={message.question.metadata.generate_attempts}
+                                iterationCount={message.question.metadata.iteration_count}
+                            />
                         </div>
                     </div>
                 )}

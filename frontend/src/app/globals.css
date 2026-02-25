@@ -1,3 +1,4 @@
+@import 'katex/dist/katex.min.css';
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -59,8 +60,8 @@ body {
   background-color: var(--bg-primary);
   /* Minimalistic Hilltop Theme: Maroon & Gold Mesh */
   background-image:
-    radial-gradient(circle at 10% 20%, rgba(139, 31, 31, 0.08) 0%, transparent 40%),
-    radial-gradient(circle at 90% 80%, rgba(212, 163, 56, 0.1) 0%, transparent 40%);
+    radial-gradient(circle at 10% 20%, rgba(139, 31, 31, 0.15) 0%, transparent 45%),
+    radial-gradient(circle at 90% 80%, rgba(212, 163, 56, 0.15) 0%, transparent 45%);
   background-attachment: fixed;
   background-size: cover;
   color: var(--text-primary);
@@ -160,4 +161,26 @@ body {
   100% {
     transform: translate(0, 0);
   }
+}
+
+@keyframes shake {
+
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+
+  25% {
+    transform: translateX(-5px);
+  }
+
+  75% {
+    transform: translateX(5px);
+  }
+}
+
+/* Fix Next.js portal positioning */
+nextjs-portal {
+  top: 0px !important;
+  left: 0px !important;
 }

@@ -1,0 +1,14 @@
+{
+  "text": "A soccer player kicks a ball from ground level. The height h, in feet, of the ball above the ground t seconds after being kicked is modeled by the equation h = -16t\u00b2 + 32t. The player wants to know at what time(s) the ball will be at a height of 12 feet above the ground. Which of the following equations should be solved to find these times?",
+  "equation": null,
+  "table": null,
+  "visual": null,
+  "answer_choices": {
+    "A": "-16t\u00b2 + 32t = 0",
+    "B": "-16t\u00b2 + 32t - 12 = 0",
+    "C": "-16t\u00b2 + 32t + 12 = 0",
+    "D": "16t\u00b2 - 32t + 12 = 0"
+  },
+  "correct_answer": "B",
+  "explanation": "To find when the ball is at a height of 12 feet, we need to solve for t when h = 12.\n\nStarting with the given equation:\n$$h = -16t^2 + 32t$$\n\nSubstitute h = 12:\n$$12 = -16t^2 + 32t$$\n\nTo solve this equation, we need to rearrange it into standard form by moving all terms to one side:\n$$12 = -16t^2 + 32t$$\n$$0 = -16t^2 + 32t - 12$$\n\nOr equivalently:\n$$-16t^2 + 32t - 12 = 0$$\n\nThis matches choice B.\n\nNote that choice D shows $16t^2 - 32t + 12 = 0$, which is equivalent to choice B (multiplied by -1), but choice B is written in the form that directly follows from the substitution process.\n\nWe can verify this is correct by solving the equation:\n$$-16t^2 + 32t - 12 = 0$$\n\nDividing by -4:\n$$4t^2 - 8t + 3 = 0$$\n\nFactoring:\n$$(2t - 1)(2t - 3) = 0$$\n\nThis gives $t = 0.5$ seconds and $t = 1.5$ seconds, meaning the ball reaches 12 feet twice: once on the way up (at 0.5 seconds) and once on the way down (at 1.5 seconds)."
+}

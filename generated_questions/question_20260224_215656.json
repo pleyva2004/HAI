@@ -1,0 +1,14 @@
+{
+  "text": "A baseball is thrown upward from the top of a building. The height of the baseball above the ground, in feet, t seconds after it is thrown can be modeled by the equation h(t) = -16t\u00b2 + 64t + 80. According to this model, how many seconds after the baseball is thrown will it hit the ground?",
+  "equation": "h(t) = -16t\u00b2 + 64t + 80",
+  "table": null,
+  "visual": null,
+  "answer_choices": {
+    "A": "2 seconds",
+    "B": "4 seconds",
+    "C": "5 seconds",
+    "D": "6 seconds"
+  },
+  "correct_answer": null,
+  "explanation": null
+}

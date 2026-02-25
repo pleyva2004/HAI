@@ -1,0 +1,14 @@
+{
+  "text": "A parking garage charges fees based on the number of hours a car is parked. For the first 2 hours, the garage charges $3 per hour. For any time after 2 hours up to and including 5 hours, the garage charges $5 per hour (in addition to the charge for the first 2 hours). For any time over 5 hours, the garage charges a flat daily rate of $35 total. Which of the following piecewise functions correctly models C(t), the total cost in dollars for parking t hours, where 0 < t \u2264 24?",
+  "equation": null,
+  "table": null,
+  "visual": null,
+  "answer_choices": {
+    "A": "C(t) = {3t for 0 < t \u2264 2; 5t for 2 < t \u2264 5; 35 for t > 5}",
+    "B": "C(t) = {3t for 0 < t \u2264 2; 6 + 5(t - 2) for 2 < t \u2264 5; 35 for t > 5}",
+    "C": "C(t) = {3t for 0 < t \u2264 2; 5t for 2 < t \u2264 5; 21 + 35 for t > 5}",
+    "D": "C(t) = {3t for 0 < t \u2264 2; 6 + 5t for 2 < t \u2264 5; 35 for t > 5}"
+  },
+  "correct_answer": "B",
+  "explanation": "The correct answer is B. \n\nTo model this situation correctly:\n- For the first 2 hours (0 < t \u2264 2): The cost is $3 per hour, so C(t) = 3t\n- For time after 2 hours up to 5 hours (2 < t \u2264 5): The customer has already paid $6 for the first 2 hours (3 \u00d7 2 = 6), and pays $5 per hour for each additional hour beyond 2 hours. So C(t) = 6 + 5(t - 2)\n- For time over 5 hours (t > 5): The cost is a flat rate of $35\n\nWe can verify: At t = 2, C(2) = 3(2) = $6. At t = 5, C(5) = 6 + 5(5-2) = 6 + 15 = $21. At t = 6, C(6) = $35.\n\nChoice A is incorrect because it doesn't account for the $6 already paid for the first 2 hours when calculating costs between 2 and 5 hours.\nChoice C incorrectly adds 21 to 35 for parking over 5 hours.\nChoice D has 6 + 5t instead of 6 + 5(t - 2), which would incorrectly calculate the cost for the middle interval."
+}

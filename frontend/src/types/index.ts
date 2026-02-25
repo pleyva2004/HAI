@@ -19,6 +19,8 @@ export interface GeneratedResponse {
         workflow_id: string;
         generate_attempts: number;
         validation_passed: boolean;
+        iteration_count?: number;
+        feedback_history?: { feedback_text: string; iteration: number }[];
     };
 }
 
@@ -29,6 +31,7 @@ export interface GenerateRequest {
     requested_difficulty?: 'Easy' | 'Medium' | 'Hard';
     requested_domain?: string;
     provide_answer?: boolean;
+    file_out?: boolean;
 }
 
 export interface Message {
@@ -39,4 +42,5 @@ export interface Message {
     question?: GeneratedResponse; // For assistant responses containing a question
     isLoading?: boolean;
     error?: boolean;
+    isFeedback?: boolean;
 }

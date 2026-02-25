@@ -1,0 +1,14 @@
+{
+  "text": "A patient is given a 400-milligram dose of medication. The amount of medication in the patient's bloodstream decreases by 15% each hour. Which of the following functions best models the amount of medication $M$, in milligrams, remaining in the patient's bloodstream $t$ hours after the dose is administered?",
+  "equation": null,
+  "table": null,
+  "visual": null,
+  "answer_choices": {
+    "A": "$M(t) = 400(0.15)^t$",
+    "B": "$M(t) = 400(0.85)^t$",
+    "C": "$M(t) = 400(1.15)^t$",
+    "D": "$M(t) = 400 - 0.15t$"
+  },
+  "correct_answer": "B",
+  "explanation": "This is an exponential decay problem where the medication decreases by a constant percentage each hour.\n\nThe general form of an exponential decay function is:\n$$M(t) = M_0 \\cdot b^t$$\n\nwhere:\n- $M_0$ is the initial amount\n- $b$ is the decay factor (the fraction that remains after each time period)\n- $t$ is time\n\nGiven information:\n- Initial amount: $M_0 = 400$ mg\n- The medication decreases by 15% each hour\n\nIf the medication decreases by 15% each hour, then 85% remains after each hour. Therefore, the decay factor is:\n$$b = 1 - 0.15 = 0.85$$\n\nThe function is:\n$$M(t) = 400(0.85)^t$$\n\nLet's verify with an example: After 1 hour, $M(1) = 400(0.85)^1 = 340$ mg, which is indeed 85% of 400 mg (or 15% less than 400 mg).\n\nWhy the other answers are incorrect:\n- Choice A uses 0.15 as the base, which would represent only the amount lost, not the amount remaining\n- Choice C uses 1.15 as the base, which represents exponential growth of 15%, not decay\n- Choice D represents linear decay, not exponential decay\n\nThe correct answer is **B**."
+}

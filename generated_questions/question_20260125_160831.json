@@ -1,0 +1,14 @@
+{
+  "text": "A small bakery produces two types of pastries: croissants and muffins. Each croissant requires 200 grams of flour, 50 grams of butter, and 15 minutes of oven time. Each muffin requires 150 grams of flour, 20 grams of butter, and 10 minutes of oven time. The bakery has 6,000 grams of flour, 1,200 grams of butter, and 480 minutes of oven time available each day. The profit is $3 per croissant and $2 per muffin. The bakery must produce at least 5 croissants and at least 5 muffins each day to maintain variety for customers.\n\nLet c represent the number of croissants and m represent the number of muffins produced. Which of the following systems of inequalities represents the constraints on production, along with the objective function that should be maximized?",
+  "equation": null,
+  "table": null,
+  "visual": null,
+  "answer_choices": {
+    "A": "200c + 150m \u2264 6000, 50c + 20m \u2264 1200, 15c + 10m \u2264 480, c \u2265 5, m \u2265 5; Maximize P = 3c + 2m",
+    "B": "200c + 150m \u2265 6000, 50c + 20m \u2265 1200, 15c + 10m \u2265 480, c \u2264 5, m \u2264 5; Maximize P = 3c + 2m",
+    "C": "200c + 150m \u2264 6000, 50c + 20m \u2264 1200, 15c + 10m \u2264 480, c \u2265 5, m \u2265 5; Minimize P = 3c + 2m",
+    "D": "150c + 200m \u2264 6000, 20c + 50m \u2264 1200, 10c + 15m \u2264 480, c \u2265 5, m \u2265 5; Maximize P = 3c + 2m"
+  },
+  "correct_answer": "A",
+  "explanation": "To solve this linear programming problem, we need to:\n\n1. Identify the constraints:\n   - Flour constraint: Each croissant uses 200g, each muffin uses 150g, total available is 6000g \u2192 200c + 150m \u2264 6000\n   - Butter constraint: Each croissant uses 50g, each muffin uses 20g, total available is 1200g \u2192 50c + 20m \u2264 1200\n   - Oven time constraint: Each croissant needs 15 min, each muffin needs 10 min, total available is 480 min \u2192 15c + 10m \u2264 480\n   - Minimum production: c \u2265 5 and m \u2265 5\n\n2. Identify the objective function:\n   - Profit per croissant is $3, profit per muffin is $2\n   - We want to maximize profit: P = 3c + 2m\n\nThe correct answer is A because:\n- The inequalities use \u2264 for resource constraints (we can't exceed available resources)\n- The minimum production constraints use \u2265 (we must make at least 5 of each)\n- The coefficients correctly match the resource usage per item as described\n- The objective is to maximize (not minimize) profit\n\nChoice B incorrectly uses \u2265 for resource constraints and \u2264 for minimum requirements.\nChoice C incorrectly minimizes instead of maximizes profit.\nChoice D switches the coefficients for croissants and muffins."
+}

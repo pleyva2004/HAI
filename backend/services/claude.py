@@ -156,7 +156,7 @@ def classify_question(extracted_features: str) -> QuestionClassification:
         raise ValueError("Failed to parse structured output from Claude response")
     return response.parsed_output # type: ignore
 
-def generate_question(extracted_features: str, classified_features: str, similar_questions: List[BaseQuestion] = []) -> GeneratedQuestion:
+def generate_question(user_requests: str, extracted_features: str, classified_features: str, similar_questions: List[BaseQuestion] = [], provide_answer: bool = True) -> GeneratedQuestion:
 
 
     # Build the generation prompt
@@ -202,6 +202,12 @@ def generate_question(extracted_features: str, classified_features: str, similar
     prompt_parts.append(classified_features)
     prompt_parts.append("</constraints>")
 
+    if user_requests:
+        prompt_parts.append("")
+        prompt_parts.append("Additionally, the user provided the following specific requests and feedback. YOU MUST FOLLOW THESE:")
+        prompt_parts.append("<user_requests>")
+        prompt_parts.append(user_requests)
+        prompt_parts.append("</user_requests>")
 
     # Add Guidelines
     prompt_parts.append("""Your goal is to create a new question that:
@@ -266,7 +272,23 @@ Plan your new question here:
 <answer_choices>
 [List each answer choice as A., B., C., D., etc.]
 </answer_choices>
-</new_question>
+""")
+
+    if provide_answer:
+        prompt_parts.append("""
+<correct_answer>
+[State which choice (A, B, C, or D) is correct]
+</correct_answer>
+
+<explanation>
+[Provide a clear, step-by-step explanation of why this answer is correct and how to solve the problem.
+IMPORTANT: Use LaTeX formatting with $ delimiters for ALL mathematical expressions, equations, and formulas.
+For example: $x^2 + 3x = 7$, $\\frac{1}{2}$, $\\int_0^1 x^2 \\, dx$, $\\sqrt{16} = 4$
+Use $...$ for inline math and $$...$$ for displayed equations on their own line.]
+</explanation>
+""")
+
+    prompt_parts.append("""</new_question>
 
 Make sure your question is completely original in content while maintaining the exact same educational objectives and difficulty level as the original.""")
 

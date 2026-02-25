@@ -1,0 +1,14 @@
+{
+  "text": "A small business manufactures and sells custom phone cases. The company's monthly profit P, in thousands of dollars, can be modeled by the quadratic equation P = -3x\u00b2 + 36x - 60, where x represents the selling price per phone case in dollars. The company wants to determine at what price(s) they will break even (that is, when their profit equals zero). What are the two break-even prices?",
+  "equation": "P = -3x\u00b2 + 36x - 60",
+  "table": null,
+  "visual": null,
+  "answer_choices": {
+    "A": "$2 and $10",
+    "B": "$4 and $8",
+    "C": "$6 and $6",
+    "D": "$3 and $12"
+  },
+  "correct_answer": "A",
+  "explanation": "To find the break-even prices, we need to solve for x when P = 0:\n\n-3x\u00b2 + 36x - 60 = 0\n\nFirst, we can factor out -3:\n-3(x\u00b2 - 12x + 20) = 0\n\nDividing both sides by -3:\nx\u00b2 - 12x + 20 = 0\n\nNow we can factor the quadratic:\n(x - 2)(x - 10) = 0\n\nThis gives us x = 2 or x = 10\n\nTherefore, the company breaks even when they charge $2 per phone case or $10 per phone case. The answer is A.\n\nAlternatively, we could use the quadratic formula: x = [-b \u00b1 \u221a(b\u00b2 - 4ac)] / 2a, where a = -3, b = 36, and c = -60, which would yield the same results."
+}

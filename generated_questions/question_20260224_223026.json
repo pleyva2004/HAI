@@ -1,0 +1,14 @@
+{
+  "text": "A soccer player kicks a ball into the air. The height of the ball above the ground, in feet, can be modeled by the equation h(t) = -16t\u00b2 + 48t, where t is the time in seconds after the ball is kicked. What is the maximum height, in feet, that the ball reaches?",
+  "equation": "h(t) = -16t\u00b2 + 48t",
+  "table": null,
+  "visual": null,
+  "answer_choices": {
+    "A": "12 feet",
+    "B": "24 feet",
+    "C": "36 feet",
+    "D": "48 feet"
+  },
+  "correct_answer": "C",
+  "explanation": "To find the maximum height of the ball, we need to find the vertex of the parabola represented by the quadratic equation $h(t) = -16t^2 + 48t$.\n\nFor a quadratic equation in the form $h(t) = at^2 + bt + c$, the t-coordinate of the vertex occurs at $t = -\\frac{b}{2a}$.\n\nIn this equation:\n- $a = -16$\n- $b = 48$\n- $c = 0$\n\nFirst, find the time when maximum height occurs:\n$$t = -\\frac{48}{2(-16)} = -\\frac{48}{-32} = \\frac{3}{2} = 1.5 \\text{ seconds}$$\n\nNow substitute $t = 1.5$ back into the height equation to find the maximum height:\n$$h(1.5) = -16(1.5)^2 + 48(1.5)$$\n$$h(1.5) = -16(2.25) + 72$$\n$$h(1.5) = -36 + 72$$\n$$h(1.5) = 36 \\text{ feet}$$\n\nTherefore, the maximum height the ball reaches is 36 feet.\n\nCommon mistakes:\n- Choice A (12 feet): This might result from calculation errors\n- Choice B (24 feet): This might come from using the wrong formula or arithmetic mistake\n- Choice D (48 feet): This is the coefficient $b$, not the maximum height"
+}

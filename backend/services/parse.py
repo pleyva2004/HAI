@@ -84,12 +84,28 @@ def parse_generated_question(raw_response: str) -> GeneratedQuestion:
             choice_text = match.group(2).strip()
             answer_choices[letter] = choice_text
 
+    # Extract correct answer
+    correct_answer = None
+    answer_match = re.search(r'<correct_answer>(.*?)</correct_answer>', raw_response, re.DOTALL)
+    if answer_match:
+        raw_ans = answer_match.group(1).strip()
+        # Look for A, B, C, or D as a standalone word
+        letter_match = re.search(r'\b([A-D])\b', raw_ans)
+        if letter_match:
+            correct_answer = letter_match.group(1)
+
+    # Extract explanation
+    explanation = None
+    explanation_match = re.search(r'<explanation>(.*?)</explanation>', raw_response, re.DOTALL)
+    if explanation_match:
+        explanation = explanation_match.group(1).strip()
+
     return GeneratedQuestion(
         text=text,
         equation=equation,
         table=table,
         visual=visual,
         answer_choices=answer_choices,
-        correct_answer=None,
-        explanation=None
+        correct_answer=correct_answer,
+        explanation=explanation
     )

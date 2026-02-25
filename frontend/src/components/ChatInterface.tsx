@@ -4,7 +4,11 @@ import { api } from '@/services/api';
 import MessageBubble from './MessageBubble';
 import ChatInput from './ChatInput';
 
-export default function ChatInterface() {
+interface ChatInterfaceProps {
+    selectedStudent?: { id: string; name: string; grade: string } | null;
+}
+
+export default function ChatInterface({ selectedStudent }: ChatInterfaceProps) {
     const [messages, setMessages] = useState<Message[]>([
         {
             id: 'welcome',
@@ -12,6 +16,27 @@ export default function ChatInterface() {
             content: "Hello! I'm Max. I can help you generate SAT practice questions. \n\nYou can describe a question type (e.g., 'quadratic equation word problem') or upload a screenshot of an existing question to get started.",
         },
     ]);
+
+    const [activeWorkflowId, setActiveWorkflowId] = useState<string | null>(null);
+
+    // Reset chat when student changes
+    useEffect(() => {
+        setActiveWorkflowId(null);
+        if (selectedStudent) {
+            setMessages([{
+                id: `welcome-${selectedStudent.id}`,
+                role: 'assistant',
+                content: `Hello! I'm ready to generate questions for **${selectedStudent.name}** (${selectedStudent.grade}). \n\nWhat topic should we focus on?`,
+            }]);
+        } else {
+            // Reset to default if deselected (or maybe keep history? For now reset is safer context)
+            setMessages([{
+                id: 'welcome-default',
+                role: 'assistant',
+                content: "Hello! I'm Max. I can help you generate SAT practice questions. \n\nYou can describe a question type (e.g., 'quadratic equation word problem') or upload a screenshot of an existing question to get started.",
+            }]);
+        }
+    }, [selectedStudent]);
     const [isLoading, setIsLoading] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -23,13 +48,20 @@ export default function ChatInterface() {
         scrollToBottom();
     }, [messages]);
 
-    const handleSendMessage = async (text: string, image?: string, settings?: { section: 'Math' | 'Reading and Writing', difficulty: 'Easy' | 'Medium' | 'Hard' }) => {
+    const handleSendMessage = async (text: string, image?: string, settings?: {
+        section: 'Math' | 'Reading and Writing';
+        difficulty: 'Easy' | 'Medium' | 'Hard';
+        provideAnswer: boolean;
+        fileOut: boolean;
+    }) => {
+        const isFeedback = activeWorkflowId !== null && !image;
         const userMessageId = Date.now().toString();
         const newUserMessage: Message = {
             id: userMessageId,
             role: 'user',
             content: text,
             image: image,
+            isFeedback: isFeedback,
         };
 
         // Add user message immediately
@@ -48,13 +80,28 @@ export default function ChatInterface() {
         ]);
 
         try {
-            const response = await api.generateQuestion({
-                description: text,
-                image: image,
-                provide_answer: true,
-                requested_section: settings?.section,
-                requested_difficulty: settings?.difficulty,
-            });
+            // Append student context if selected
+            let finalDescription = text;
+            if (selectedStudent) {
+                finalDescription = `[Context: Student ${selectedStudent.name}, ${selectedStudent.grade}] ${text}`;
+            }
+
+            let response;
+            if (isFeedback) {
+                response = await api.submitFeedback(activeWorkflowId, finalDescription);
+            } else {
+                response = await api.generateQuestion({
+                    description: finalDescription,
+                    image: image,
+                    provide_answer: settings?.provideAnswer,
+                    file_out: settings?.fileOut,
+                    requested_section: settings?.section,
+                    requested_difficulty: settings?.difficulty,
+                });
+            }
+
+            // Update the active workflow ID
+            setActiveWorkflowId(response.metadata.workflow_id);
 
             // Update the loading message with actual content
             setMessages((prev) =>
@@ -72,6 +119,9 @@ export default function ChatInterface() {
 
         } catch (error) {
             console.error('Generation error:', error);
+
+            // Clear workflow ID on error so next message starts fresh
+            setActiveWorkflowId(null);
 
             // Update loading message to show error
             setMessages((prev) =>
@@ -92,10 +142,10 @@ export default function ChatInterface() {
     };
 
     return (
-        <div className="flex flex-col h-screen pt-16 bg-transparent">
+        <div className="flex flex-col h-full bg-transparent relative">
             {/* Chat Area */}
-            <div className="flex-1 overflow-y-auto w-full scroll-smooth">
-                <div className="container max-w-4xl mx-auto px-4 min-h-full flex flex-col justify-start pb-4 pt-32">
+            <div className="flex-1 overflow-y-auto w-full scroll-smooth pt-20">
+                <div className="container max-w-4xl mx-auto px-4 min-h-full flex flex-col justify-start pb-4">
 
                     {messages.map((msg, index) => (
                         <div key={msg.id} className={index === 0 ? 'mt-8' : ''}>

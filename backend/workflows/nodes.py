@@ -10,6 +10,9 @@ from typing import Optional
 from toon_format import encode
 from backend.services import claude, embeddings, validation, retrieval
 from backend.config import MAX_GENERATION_ATTEMPTS
+import json
+import os
+from datetime import datetime
 
 
 def extract_structure(state: HAIState) -> HAIState:
@@ -91,12 +94,27 @@ def generate_question(state: HAIState) -> HAIState:
     encoded_extracted_data = encode(state.extracted_features.model_dump()) if state.extracted_features else ""
     encoded_classified_data = encode(state.classified_features.model_dump()) if state.classified_features else ""
 
+
     # Generate question using Claude
     result = claude.generate_question(
+        user_requests=state.user_input.description or "",
         extracted_features=encoded_extracted_data,
         classified_features=encoded_classified_data,
-        similar_questions=state.similar_questions
+        similar_questions=state.similar_questions,
+        provide_answer=state.user_input.provide_answer
     )
+
+    # Always save generated questions to the generated_questions directory
+    output_dir = "generated_questions"
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Create filename with timestamp
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"{output_dir}/question_{timestamp}.json"
+
+    # Save to file
+    with open(filename, "w") as f:
+        json.dump(result.model_dump(), f, indent=2)
 
     # Result is already a GeneratedQuestion object
     state.generated_question = result
@@ -119,6 +137,34 @@ def validate_output(state: HAIState) -> HAIState:
     else:
         state.validation_passed = False
         state.validation_errors = errors
+
+    return state
+
+
+def process_feedback(state: HAIState) -> HAIState:
+    """
+    Incorporate user feedback into the state for the next generation attempt.
+    Appends feedback to the description so generate_question sees it.
+    """
+    if not state.feedback_history:
+        return state
+
+    # Build a feedback-augmented description for Claude
+    # We rebuild it purely from the original user description + all feedback history
+    original_desc = state.user_input.description or ""
+    feedback_context = "\n\nUser Feedback on previous attempts:\n"
+    for entry in state.feedback_history:
+        feedback_context += f"- Iteration {entry.iteration}: {entry.feedback_text}\n"
+
+    # We overwrite the description with the augmented one
+    state.user_input.description = original_desc + feedback_context
+    state.iteration_count += 1
+
+    # Reset generation state for the new iteration
+    state.generation_attempt = 0
+    state.validation_passed = False
+    state.validation_errors = []
+    state.generated_question = None
 
     return state
 

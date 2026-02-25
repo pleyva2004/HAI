@@ -1,0 +1,9 @@
+{
+  "text": "Solve for x",
+  "equation": "5x + 7 = 32",
+  "table": null,
+  "visual": null,
+  "answer_choices": {},
+  "correct_answer": null,
+  "explanation": "To solve for x, subtract 7 from both sides of the equation:\n5x + 7 = 32\n5x = 32 - 7\n5x = 25\n\nThen divide both sides by 5:\nx = 25 \u00f7 5\nx = 5"
+}

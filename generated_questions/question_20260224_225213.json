@@ -1,0 +1,14 @@
+{
+  "text": "The population of a small town is decreasing exponentially due to migration to urban areas. In 2010, the town had a population of 50,000. By 2015, the population had decreased to 40,000. If the population continues to decrease at the same exponential rate, which of the following is closest to the expected population in 2020?",
+  "equation": null,
+  "table": null,
+  "visual": null,
+  "answer_choices": {
+    "A": "30,000",
+    "B": "32,000",
+    "C": "35,000",
+    "D": "38,000"
+  },
+  "correct_answer": "B",
+  "explanation": "To solve this exponential decay problem, we need to use the exponential decay model: $P(t) = P_0 \\cdot b^t$, where $P(t)$ is the population at time $t$, $P_0$ is the initial population, and $b$ is the decay factor.\n\nFirst, let's establish our time intervals. Let $t = 0$ correspond to 2010, so 2015 is at $t = 5$ and 2020 is at $t = 10$.\n\nGiven information:\n- $P(0) = 50,000$ (population in 2010)\n- $P(5) = 40,000$ (population in 2015)\n\nWe need to find the decay factor $b$ over a 5-year period:\n$$40,000 = 50,000 \\cdot b^5$$\n\nSolving for $b^5$:\n$$b^5 = \\frac{40,000}{50,000} = 0.8$$\n\nNow we can find the population in 2020 (at $t = 10$):\n$$P(10) = 50,000 \\cdot b^{10}$$\n\nSince $b^{10} = (b^5)^2$:\n$$P(10) = 50,000 \\cdot (0.8)^2 = 50,000 \\cdot 0.64 = 32,000$$\n\nTherefore, the expected population in 2020 is 32,000.\n\nNote: Choice A (30,000) might result from incorrectly assuming linear decay (subtracting 10,000 every 5 years). Exponential decay means the population decreases by a constant percentage (not a constant amount) over equal time intervals.\n\nThe correct answer is **B. 32,000**."
+}

@@ -1,0 +1,14 @@
+{
+  "text": "A soccer ball is kicked upward from ground level. The height h, in feet, of the ball above the ground t seconds after being kicked can be modeled by the quadratic function h(t) = -16t\u00b2 + 64t + 3. According to this model, at what time(s), in seconds, does the ball reach a height of 51 feet above the ground?",
+  "equation": null,
+  "table": null,
+  "visual": null,
+  "answer_choices": {
+    "A": "1 second only",
+    "B": "3 seconds only",
+    "C": "1 second and 3 seconds",
+    "D": "The ball never reaches a height of 51 feet"
+  },
+  "correct_answer": "C",
+  "explanation": "To find when the ball reaches a height of 51 feet, we need to solve the equation:\n\n$$h(t) = 51$$\n\nSubstituting the given function:\n\n$$-16t^2 + 64t + 3 = 51$$\n\nSubtract 51 from both sides:\n\n$$-16t^2 + 64t - 48 = 0$$\n\nFactor out $-16$:\n\n$$-16(t^2 - 4t + 3) = 0$$\n\nDivide both sides by $-16$:\n\n$$t^2 - 4t + 3 = 0$$\n\nFactor the quadratic:\n\n$$(t - 1)(t - 3) = 0$$\n\nThis gives us two solutions:\n\n$$t = 1 \\text{ or } t = 3$$\n\nBoth solutions are positive and realistic for this scenario. The ball reaches 51 feet at $t = 1$ second on its way up, and again at $t = 3$ seconds on its way down.\n\nTherefore, the correct answer is **C. 1 second and 3 seconds**."
+}

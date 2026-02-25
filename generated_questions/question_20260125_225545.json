@@ -1,0 +1,23 @@
+{
+  "text": "A survey was conducted among 800 high school students to determine their participation in after-school activities. The table below shows the number of students participating in sports, arts, or academic clubs, categorized by grade level.\n\nBased on the data in the table, which of the following statements is true?",
+  "equation": null,
+  "table": {
+    "headers": [
+      "Grade Level",
+      "Sports",
+      "Arts",
+      "Academic Clubs",
+      "Total"
+    ],
+    "rows": []
+  },
+  "visual": null,
+  "answer_choices": {
+    "A": "The percentage of Grade 10 students participating in Arts is greater than the percentage of Grade 11 students participating in Arts.",
+    "B": "More than 50% of all students surveyed participate in Sports.",
+    "C": "Grade 12 has the highest participation rate in Academic Clubs among all grade levels.",
+    "D": "The total number of students participating in activities is 740."
+  },
+  "correct_answer": null,
+  "explanation": null
+}

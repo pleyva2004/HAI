@@ -54,4 +54,24 @@ export const api = {
 
         return res.json();
     },
+
+    /**
+     * Submit feedback to refine a generated question
+     */
+    async submitFeedback(workflowId: string, feedbackText: string): Promise<GeneratedResponse> {
+        const res = await fetch(`${API_BASE_URL}/feedback/${workflowId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ feedback_text: feedbackText }),
+        });
+
+        if (!res.ok) {
+            const errorData = await res.json().catch(() => ({}));
+            throw new Error(errorData.detail || 'Failed to submit feedback');
+        }
+
+        return res.json();
+    },
 };

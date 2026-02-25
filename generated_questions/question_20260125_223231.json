@@ -1,0 +1,14 @@
+{
+  "text": "A baseball player throws a ball straight up into the air from a height of 5 feet above the ground. The height of the ball, h, in feet, t seconds after it is thrown can be modeled by the equation h(t) = -16t\u00b2 + 64t + 5. According to this model, approximately how many seconds after the ball is thrown will it hit the ground?",
+  "equation": "h(t) = -16t\u00b2 + 64t + 5",
+  "table": null,
+  "visual": null,
+  "answer_choices": {
+    "A": "2.0 seconds",
+    "B": "4.1 seconds",
+    "C": "5.0 seconds",
+    "D": "8.0 seconds"
+  },
+  "correct_answer": "B",
+  "explanation": "To find when the ball hits the ground, we need to solve for t when h(t) = 0.\n\nSetting up the equation:\n-16t\u00b2 + 64t + 5 = 0\n\nUsing the quadratic formula where a = -16, b = 64, and c = 5:\nt = (-b \u00b1 \u221a(b\u00b2 - 4ac)) / (2a)\nt = (-64 \u00b1 \u221a(64\u00b2 - 4(-16)(5))) / (2(-16))\nt = (-64 \u00b1 \u221a(4096 + 320)) / (-32)\nt = (-64 \u00b1 \u221a4416) / (-32)\nt = (-64 \u00b1 66.45) / (-32)\n\nThis gives us two solutions:\nt = (-64 + 66.45) / (-32) \u2248 -0.08 seconds\nt = (-64 - 66.45) / (-32) \u2248 4.08 seconds\n\nSince time cannot be negative in this context, we discard the negative solution. The ball hits the ground approximately 4.1 seconds after it is thrown.\n\nThe correct answer is B."
+}

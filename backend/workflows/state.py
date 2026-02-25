@@ -18,7 +18,7 @@ class UserInput(BaseModel):
     requested_difficulty: Optional[Literal["Easy", "Medium", "Hard"]] = None
     requested_domain: Optional[Literal["Algebra", "Advanced Math", "Problem-Solving and Data Analysis", "Geometry and Trigonometry"]] = None
     output_format: Literal["latex-hardcoded"] = "latex-hardcoded"
-    provide_answer: bool = False
+    provide_answer: bool = True
     file_out: bool = False
 
 class TableData(BaseModel):
@@ -72,6 +72,11 @@ class QuestionClassification(BaseModel):
     skill: List[str]
     difficulty: Literal["Easy", "Medium", "Hard"]
 
+class FeedbackEntry(BaseModel):
+    feedback_text: str
+    timestamp: str
+    iteration: int
+
 class HAIState(BaseModel):
 
     # USER INPUT (from user)
@@ -100,6 +105,10 @@ class HAIState(BaseModel):
     workflow_id: str
     started_at: str
     error: Optional[str]
+
+    # FEEDBACK LOOP
+    feedback_history: List[FeedbackEntry] = Field(default_factory=list)
+    iteration_count: int = 0
 
     def increment_generation_attempt(self) -> None:
         self.generation_attempt += 1
